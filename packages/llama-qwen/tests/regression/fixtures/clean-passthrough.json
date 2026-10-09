@@ -1,0 +1,8 @@
+{
+  "kind": "nonstream",
+  "upstream": { "content": "Your project has 3 Python files and one test suite. Nothing else stands out." },
+  "expect": {
+    "content": "Your project has 3 Python files and one test suite. Nothing else stands out.",
+    "tool_calls": []
+  }
+}

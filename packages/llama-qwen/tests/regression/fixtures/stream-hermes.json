@@ -1,0 +1,23 @@
+{
+  "kind": "stream",
+  "upstream": {
+    "chunks": [
+      "<tool_call>", "{\"na", "me\":", " \"li", "st_d", "ir\",", " \"ar", "gum", "ents", "\": {", "\"pa", "th\":" , " \".\"}}", "\n"
+    ]
+  },
+  "expect": {
+    "events": [
+      {
+        "type": "tool_calls",
+        "tool_calls": [
+          {
+            "id": "call_0",
+            "type": "function",
+            "function": { "name": "list_dir", "arguments": "{\"path\": \".\"}" }
+          }
+        ],
+        "stop": true
+      }
+    ]
+  }
+}
