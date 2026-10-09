@@ -1,0 +1,41 @@
+[project]
+name = "llama-middleware-workspace"
+version = "0.0.0"
+description = "Workspace root: global dev tooling + shared configs for the llama-middleware sub-projects"
+requires-python = ">=3.14.2"
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "respx>=0.23",
+    "ruff>=0.14",
+    "pyright>=1.1.407",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/proxy/tests", "packages/llama-qwen/tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["apps/proxy/src", "packages/llama-qwen/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+include = [
+    "apps/proxy/src",
+    "packages/llama-qwen/src",
+    "apps/proxy/tests",
+    "packages/llama-qwen/tests",
+]
+exclude = ["**/__pycache__", ".venv", "scripts"]
+venvPath = "."
+venv = ".venv"

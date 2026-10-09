@@ -1,0 +1,23 @@
+[project]
+name = "proxy"
+version = "0.1.0"
+description = "FastAPI middleware conduit standing between agent clients and Qwen servers"
+readme = "../../README.md"
+authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
+requires-python = ">=3.14.2"
+dependencies = [
+    "llama-qwen",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+]
+
+[tool.uv.sources]
+llama-qwen = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "proxy"
