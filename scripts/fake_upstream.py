@@ -27,7 +27,7 @@ app = FastAPI(title="fake leaking upstream")
 async def leak(request: Request):
     body = await request.json()
     if body.get("stream"):
-        async def gen() -> AsyncGenerator[bytes, None]:
+        async def gen() -> AsyncGenerator[bytes]:
             for i in range(0, len(LEAKED), 3):
                 chunk = LEAKED[i : i + 3]
                 event = {"choices": [{"delta": {"content": chunk}}]}
