@@ -1,0 +1,19 @@
+{
+  "kind": "nonstream",
+  "upstream": {
+    "content": "Sure, let me check the folder. <tool_call>{\"name\":\"list_dir\",\"arguments\":{\"path\":\".\"}}\n</tool_call>"
+  },
+  "expect": {
+    "content": "Sure, let me check the folder.",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "list_dir",
+          "arguments": "{\"path\": \".\"}"
+        }
+      }
+    ]
+  }
+}
