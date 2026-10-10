@@ -39,3 +39,4 @@ include = [
 exclude = ["**/__pycache__", ".venv", "scripts"]
 venvPath = "."
 venv = ".venv"
+

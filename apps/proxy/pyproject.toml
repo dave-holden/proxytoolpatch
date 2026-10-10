@@ -1,6 +1,6 @@
 [project]
 name = "proxy"
-version = "0.1.0"
+version = "0.2.0"
 description = "FastAPI middleware conduit standing between agent clients and Qwen servers"
 readme = "../../README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
@@ -21,3 +21,9 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "proxy"
+
+# [project.scripts]
+# proxy = "proxy.__main__:main"
+
+# [tool.uv.scripts]
+# serve = "uvicorn proxy.main:app --host 127.0.0.1 --port 8180 --reload"
