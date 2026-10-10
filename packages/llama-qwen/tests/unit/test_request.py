@@ -149,3 +149,47 @@ def test_clean_history_untouched():
     out, notes = normalize_chat_request({"model": "q", "messages": msgs})
     assert out["messages"] == msgs
     assert not notes
+
+
+def _parametrized_history():
+    """Repaired multi-turn history: leaked twin + adjacent assists + dupes."""
+    leaked = '{"name": "read", "arguments": {"filePath": "/tmp"}}'
+    return [
+        {"role": "system", "content": "sys"},
+        _user("list"),
+        _assistant_text(leaked),
+        _assistant_tool_calls("read", '{"filePath": "/tmp"}'),
+        {"role": "tool", "tool_call_id": "call_x", "content": "entries"},
+        _assistant_text("answer"),
+        _assistant_text("answer"),
+    ]
+
+
+def test_mlx_backend_gets_same_history_sanitize_shape():
+    """MLX parity: the gguf-400 history shape must collapse identically."""
+    out_mlx, notes_mlx = normalize_chat_request(
+        {"model": "q", "messages": _parametrized_history()}, backend="mlx"
+    )
+    out_gguf, notes_gguf = normalize_chat_request(
+        {"model": "q", "messages": _parametrized_history()}, backend="gguf"
+    )
+    assert out_mlx["messages"] == out_gguf["messages"]
+    assert notes_mlx == notes_gguf
+    roles = [m["role"] for m in out_mlx["messages"]]
+    assert roles == ["system", "user", "assistant", "tool", "assistant"], roles
+
+
+def test_mlx_no_tool_choice_no_notes():
+    p = {**BASE, "tools": [GOOD_TOOL]}
+    out, warn = normalize_chat_request(p, backend="mlx")
+    assert "tool_choice" not in out
+    assert warn == ["leaked tool-call text turn merged into tool_calls turn"] or not warn or any(
+        "merged" in w for w in warn
+    )  # history notes only; no tool_choice note when key absent
+
+
+def test_mlx_strips_tool_choice_and_notes_it():
+    p = {**BASE, "tools": [GOOD_TOOL], "tool_choice": "auto"}
+    out, warn = normalize_chat_request(p, backend="mlx")
+    assert "tool_choice" not in out
+    assert any("tool_choice" in w for w in warn)

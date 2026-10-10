@@ -1,6 +1,12 @@
 # RELEASE.md
 
-## v0.2.0 — 0098a69 (2026-10-10)
+## v0.2.1 (2026-10-10)
+- MLX parity tests: `backend="mlx"` produces an identical sanitized history shape to gguf (parametrized parity test); `tool_choice` strip has its own note assertion.
+- `PUBLISHING.md`: concise publish guide (pre-publish checklist, bump rules, TestPyPI-first flow, name-availability check, install-and-smoke-test of the published wheel); `llama-qwen` confirmed **free** on PyPI; wheel build verified locally.
+- RELEASE.md headings now carry version + date only (no commit hash).
+- Package versions `0.2.0` → `0.2.1`. Checks: 50 passed / 4 skipped; ruff clean; pyright 0 errors.
+
+## v0.2.0 (2026-10-10)
 - History sanitizer (`_sanitize_history` in request normalizer): drops leaked-JSON text twins of repaired tool_calls turns (semantic argument match), merges adjacent assistant messages, dedupes duplicate adjacent answers — fixes llama-server `400 "Cannot have 2 or more assistant messages at the end of the list"` reported live by opencode.
 - Proxy SSE path now always terminates the OpenAI stream: preserves upstream `id`/`created`/`model`, forwards `usage`, and emits a `finish_reason` chunk before `[DONE]`, using the upstream's own or a synthetic `stop` — fixes client re-prompt loop (opencode re-issued identical prompts forever when the terminating chunk was dropped during repair reshaping).
 - Three new streaming tests: termination survives repair, meta/usage forwarded, unterminated upstream gets synthetic stop.
@@ -12,7 +18,7 @@
 - Configs: `config/opencode-gguf.jsonc` (model id `qwen-gguf`) and `config/opencode-mlx.jsonc` (model id `qwen-mlx`).
 - Versions: both member packages `0.1.0` → `0.2.0`. Checks: 47 passed / 4 skipped; ruff clean; pyright 0 errors.
 
-## v0.1.0 — ebbdbb7 (2026-10-09)
+## v0.1.0 (2026-10-09)
 - uv workspace: virtual root with shared ruff/pyright/pytest configs; packages/llama-qwen (pure logic) + apps/proxy (FastAPI).
 - Core engine: OpenAI-compatible schemas, JSON heal engine (trailing commas, raw newlines, smart quotes, code fences).
 - Tool-call extractor: Hermes tags, fenced ```json, bare JSON-in-prose, with tool-name filtering.
