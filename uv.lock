@@ -188,7 +188,7 @@ dev = [
 
 [[package]]
 name = "llama-qwen"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "packages/llama-qwen" }
 dependencies = [
     { name = "pydantic" },
@@ -238,7 +238,7 @@ wheels = [
 
 [[package]]
 name = "proxy"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "apps/proxy" }
 dependencies = [
     { name = "fastapi" },
