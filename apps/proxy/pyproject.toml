@@ -1,6 +1,6 @@
 [project]
 name = "proxy"
-version = "0.2.0"
+version = "0.2.1"
 description = "FastAPI middleware conduit standing between agent clients and Qwen servers"
 readme = "../../README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
