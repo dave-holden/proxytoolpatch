@@ -1,6 +1,6 @@
 # RELEASE.md
 
-## v0.2.0 — f1e18df (2026-10-10)
+## v0.2.0 — 0098a69 (2026-10-10)
 - History sanitizer (`_sanitize_history` in request normalizer): drops leaked-JSON text twins of repaired tool_calls turns (semantic argument match), merges adjacent assistant messages, dedupes duplicate adjacent answers — fixes llama-server `400 "Cannot have 2 or more assistant messages at the end of the list"` reported live by opencode.
 - Proxy SSE path now always terminates the OpenAI stream: preserves upstream `id`/`created`/`model`, forwards `usage`, and emits a `finish_reason` chunk before `[DONE]`, using the upstream's own or a synthetic `stop` — fixes client re-prompt loop (opencode re-issued identical prompts forever when the terminating chunk was dropped during repair reshaping).
 - Three new streaming tests: termination survives repair, meta/usage forwarded, unterminated upstream gets synthetic stop.
