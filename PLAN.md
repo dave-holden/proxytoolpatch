@@ -189,26 +189,30 @@ the empty root `src/` is deleted in the same task.
 
 - **Ports:** middleware listens on **8180**; upstream (llama-server / mlx / llama-swap) on **8181**.
   Overridable via env `LMW_UPSTREAM_URL` (default `http://127.0.0.1:8181`).
+
 - **Passthrough-first:** a request with no `tools`, and a response whose content contains no tool
   leak, must emerge byte-equivalent. This is regression-tested (Task 6 fixtures).
+
 - **Sub-millisecond rule:** pure-logic packages must not block; stream repair must be O(n) over
   streamed bytes with bounded buffering (never buffer a whole SSE body).
+
 - **Every task ends with `git commit`.** Unit-test → implement → verify → commit, always.
+
 - Python ≥3.14, pydantic v2, no heavyweight deps in packages (stdlib `json`/`re` only).
 
 ---
 
 ## 4. Milestones → Tasks
 
-**M1 — Workspace bootstrap** → Task 1
-**M2 — Inbound repair engine: JSON healing** → Task 2
-**M3 — Extractor: pull tool calls out of leaked content** → Task 3
-**M4 — Stream healing for SSE** → Task 4
-**M5 — Outbound request normalization** → Task 5
-**M6 — Regression harness: golden fixtures** → Task 6
-**M7 — Composable public API packaging** → Task 7
-**M8 — Proxy app: CRUD routes + conduit + passthrough** → Task 8
-**M9 — Proxy app: repair-in-transit (non-streaming & streaming)** → Task 9
+**M1  — Workspace bootstrap** → Task 1
+**M2  — Inbound repair engine: JSON healing** → Task 2
+**M3  — Extractor: pull tool calls out of leaked content** → Task 3
+**M4  — Stream healing for SSE** → Task 4
+**M5  — Outbound request normalization** → Task 5
+**M6  — Regression harness: golden fixtures** → Task 6
+**M7  — Composable public API packaging** → Task 7
+**M8  — Proxy app: CRUD routes + conduit + passthrough** → Task 8
+**M9  — Proxy app: repair-in-transit (non-streaming & streaming)** → Task 9
 **M10 — Debug UX + docs** → Task 10
 **M11 — Human E2E validation against real model** → Task 11
 
@@ -716,6 +720,7 @@ cd llama-middleware && uv run uvicorn proxy.main:app --host 127.0.0.1 --port 818
 
 # T3 — client (curl = cheapest, least-noisy agent client)
 LMW_TRACE=1 uv run uvicorn proxy.main:app --host 127.0.0.1 --port 8180   # restart w/ trace if preferred
+
 curl -s http://127.0.0.1:8180/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"qwen2.5-coder","stream":false,
@@ -760,32 +765,38 @@ tests, (3) some human-visible breakpoints so you can watch prompts & responses f
    `pyproject.toml` edit so the venv is fresh (PyCharm does not invoke `uv sync` for you).
 4. `Settings ▸ Tools ▸ Python Integrated Tools ▸ Test runner ▸ pytest`.
 
+
 ### 6.2 Run/Debug configuration — "proxy"
 
 `Run ▸ Edit Configurations… ▸ + ▸ Python`
 
-| Field | Value |
-|---|---|
-| Name | `proxy` |
-| Module name | `uvicorn` (pick the "module name" radio, not "script path") |
-| Parameters | `proxy.main:app --host 127.0.0.1 --port 8180` |
-| Working directory | `$PROJECT_DIR$` (workspace root, so `.venv` + imports resolve) |
-| Environment variables | `PYTHONPATH=apps/proxy/src;LMW_UPSTREAM_URL=http://127.0.0.1:8181;LMW_TRACE=1` |
-| Before launch | — none needed |
+| Field                 | Value                                                                           |
+| --------------------- | ------------------------------------------------------------------------------- |
+| Name                  | `proxy`                                                                         |
+| Module name           | `uvicorn` (pick the "module name" radio, not "script path")                     |
+| Parameters            | `proxy.main:app --host 127.0.0.1 --port 8180`                                   |
+| Working directory     | `$PROJECT_DIR$` (workspace root, so `.venv` + imports resolve)                  |
+| Environment variables | `PYTHONPATH=apps/proxy/src;LMW_UPSTREAM_URL=http://127.0.0.1:8181;LMW_TRACE=1`  |
+| Before launch         | — none needed                                                                   |
 
 Save two copies: **`proxy`** (needs T1 upstream running, real or fake) and **`proxy (no model)`**
 (same, plus `LMW_UPSTREAM_URL=http://127.0.0.1:9999` and using the fake-upstream fixture below).
 
+
 ### 6.3 Debugging techniques for watching prompts/responses
 
 1. **Breakpoints — "content wash" checkpoints.** Put line breakpoints in:
-   - `packages/llama-qwen/src/llama_qwen/extractor.py` — inside `extract_tool_calls`, top of
+
+  - `packages/llama-qwen/src/llama_qwen/extractor.py` — inside `extract_tool_calls`, top of
      function: inspect `content` arriving raw from Qwen, then step over to watch the repaired
      `tool_calls` list materialize.
+
    - `packages/llama-qwen/src/llama_qwen/fixer.py` — inside `heal_json`: inspect the raw broken
      JSON string and its healed result.
+
    - `apps/proxy/src/proxy/main.py` — in the `chat_completions` route: inspect `body` (what the
      client sent) and the payload we forward upstream (sanitized).
+
    Use pyCharm's inline *Evaluate Expression* (⌥F8 / Alt+F8) on `json.dumps(x, indent=2)` for
    readable payload inspection.
 
@@ -793,7 +804,8 @@ Save two copies: **`proxy`** (needs T1 upstream running, real or fake) and **`pr
    run window (or enable PyCharm's Run panel pinning). You'll see:
    `[CLIENT→]` (raw client request), `[MW→UPSTREAM]` (after `normalize_chat_request`),
    `[UPSTREAM→]` (raw Qwen reply), `[MW→CLIENT]` (post-repair).
-   This gives throughput behavior without stopping the mechanism.
+
+  This gives throughput behavior without stopping the mechanism.
 
 3. **`pytest` Run/Debug configs.**
    - Config name `pytest: unit` → Target: `packages/llama-qwen/tests/unit` (directory).
@@ -833,13 +845,14 @@ Run config "fake_upstream": Module `uvicorn`, Parameters `scripts.fake_upstream:
 Working dir `$PROJECT_DIR$`. Then run "proxy (no model)" against it. Set a breakpoint in
 `extract_tool_calls` and fire a curl at 8180 - you'll watch the leak hit the extractor.
 
+
 ### 6.4 Recommended debugging loop
 
 1. Start Run config **`fake_upstream`** (if not running a real model).
 2. Start Debug config **`proxy (no model)`**; put your breakpoints in Tasks 2-4 modules.
 3. In PyCharm's **HTTP Client** scratch file (`Tools ▸ HTTP Client`), or in any terminal:
 
-```http
+```sh
 POST http://127.0.0.1:8180/v1/chat/completions
 Content-Type: application/json
 
@@ -851,6 +864,7 @@ Content-Type: application/json
 4. Watch each breakpoint hit in sequence. ⌥F8 (Evaluate) to inspect & re-attempt variants live.
 5. If real model behavior surprises you: capture raw upstream response via `LMW_TRACE=1` logs,
    add it as a new regression fixture pair (Task 6), re-run `pytest: regression`.
+
 
 ---
 
@@ -869,6 +883,7 @@ Content-Type: application/json
   real versions live in sub-projects: `packages/llama-qwen/pyproject.toml`, `apps/proxy/pyproject.toml`).
 - Tag: `git tag vX.Y.Z && git push origin vX.Y.Z` where possible.
 
+
 ---
 
 ## 8. README (to be written in Task 10)
@@ -877,23 +892,24 @@ One-pager: what/why, 3-terminal rig diagram + ports table, `uv run pytest` /
 `uv run ruff check . && uv run pyright` commands, env vars (`LMW_UPSTREAM_URL`, `LMW_TRACE`),
 pointer to PLAN.md §6 for PyCharm debugging, and "how to capture a new regression fixture".
 
+
 ---
 
 ## 9. Self-Review (spec → plan coverage)
 
-| Requirement | Covered by |
-|---|---|
-| uv workspace replacing scaffold, `src/` layout | Task 1 |
-| Root hosting pyright/ruff/pytest configs used by sub-projects | Task 1 (§2 root pyproject) |
-| FastAPI proxy app module `apps/proxy` | Tasks 8–9 (+fakes in §6.3) |
-| Core logic package (pure, no sockets) `packages/llama-qwen` | Tasks 2–7 |
-| MLX + GGUF support | Task 5 (backend flag), Task 11 (both T1 variants) |
-| PyCharm Run/Debug as payloads transit | §6 (full instructions incl. fake upstream) |
-| Unit tests | Tasks 2–5, 7–9 (`tests/unit`, `apps/proxy/tests`) |
-| Regression tests | Task 6 (golden fixture pairs, captured from real Qwen runs) |
-| Streams stay low-overhead (TTFT) | Task 4 bounded buffering + Task 9 test |
-| Passthrough-first | Tasks 8 (byte pass-through test), 6 fixture #4/#5 |
-| Versioning & RELEASE.md | §7 + Task 10 |
+| Requirement                                                   | Covered by                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------- |
+| uv workspace replacing scaffold, `src/` layout                | Task 1                                                        |
+| Root hosting pyright/ruff/pytest configs used by sub-projects | Task 1 (§2 root pyproject)                                    |
+| FastAPI proxy app module `apps/proxy`                         | Tasks 8–9 (+fakes in §6.3)                                    |
+| Core logic package (pure, no sockets) `packages/llama-qwen`   | Tasks 2–7                                                     |
+| MLX + GGUF support                                            | Task 5 (backend flag), Task 11 (both T1 variants)             |
+| PyCharm Run/Debug as payloads transit                         | §6 (full instructions incl. fake upstream)                    |
+| Unit tests                                                    | Tasks 2–5, 7–9 (`tests/unit`, `apps/proxy/tests`)             |
+| Regression tests                                              | Task 6 (golden fixture pairs, captured from real Qwen runs)   |
+| Streams stay low-overhead (TTFT)                              | Task 4 bounded buffering + Task 9 test                        |
+| Passthrough-first                                             | Tasks 8 (byte pass-through test), 6 fixture #4/#5             |
+| Versioning & RELEASE.md                                       | §7 + Task 10                                                  |
 
 Known deferred (deliberately): llama-swap integration, `vLLM`-style response-format normalization,
 MCP tooling — all out of scope per §1 non-goals.

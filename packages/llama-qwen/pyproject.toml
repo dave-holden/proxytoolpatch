@@ -1,6 +1,6 @@
 [project]
 name = "llama-qwen"
-version = "0.1.0"
+version = "0.2.0"
 description = "Qwen tool-calling template-mismatch detector and repairer (pure logic, offline-testable)"
 readme = "README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
@@ -13,3 +13,6 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "llama_qwen"
+
+# [project.scripts]
+# proxy = "uvicorn proxy.main:app --host 127.0.0.1 --port 8180 --reload"

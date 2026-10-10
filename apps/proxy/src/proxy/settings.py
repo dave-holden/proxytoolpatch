@@ -11,7 +11,8 @@ class Settings:
             "LMW_UPSTREAM_URL", "http://127.0.0.1:8181"
         )
         self.backend: str = os.environ.get("LMW_BACKEND", "gguf")
-        self.trace: bool = os.environ.get("LMW_TRACE", "") == "1"
+        self.trace: bool = (os.environ.get("LMW_TRACE", "") == "1"
+                            or os.environ.get("LMW_TRACE_FILE", "") != "")
 
 
 def get_settings() -> Settings:

@@ -127,6 +127,10 @@ async def _streaming(request: Request, payload: dict[str, Any]):
 
     async def gen() -> AsyncGenerator[bytes]:
         healer = StreamHealer(tool_names=tool_names)
+        meta: dict[str, Any] = {}
+        usage: dict[str, Any] | None = None
+        upstream_finish: str | None = None
+        terminated = False  # a finish_reason has been forwarded downstream
         try:
             async for chunk in upstream.aiter_bytes():
                 for kind, data in _sse_events(chunk):
@@ -134,14 +138,40 @@ async def _streaming(request: Request, payload: dict[str, Any]):
                         continue
                     if data is None:
                         continue
-                    delta = (data.get("choices") or [{}])[0].get("delta") or {}
+                    if not meta:
+                        # Forward id/created/model so clients correlating
+                        # chunks to the request don't see a different object.
+                        meta = {
+                            k: data[k]
+                            for k in ("id", "created", "model", "system_fingerprint")
+                            if k in data
+                        }
+                    if data.get("usage"):
+                        usage = data["usage"]
+                    choice = (data.get("choices") or [{}])[0]
+                    if choice.get("finish_reason"):
+                        upstream_finish = choice["finish_reason"]
+                    delta = choice.get("delta") or {}
                     text = delta.get("content")
                     if not text:
                         continue
                     for ev in healer.feed(text):
-                        yield _event_json(ev)
+                        if ev["type"] == "tool_calls" and ev.get("stop"):
+                            yield _event_json(ev, meta, "tool_calls", usage)
+                            terminated = True
+                        else:
+                            yield _event_json(ev, meta)
             for ev in healer.finish():
-                yield _event_json(ev)
+                if ev["type"] == "tool_calls" and ev.get("stop"):
+                    yield _event_json(ev, meta, "tool_calls", usage)
+                    terminated = True
+                else:
+                    yield _event_json(ev, meta)
+            if not terminated:
+                # Repaired/replayed streams still need OpenAI-protocol
+                # termination: without a finish_reason chunk, opencode treats
+                # every response as an unterminated turn and re-prompts.
+                yield _event_json({"type": "control"}, meta, upstream_finish or "stop", usage)
             yield b"data: [DONE]\n\n"
         finally:
             await upstream.aclose()
@@ -151,28 +181,31 @@ async def _streaming(request: Request, payload: dict[str, Any]):
     )
 
 
-def _event_json(ev: dict[str, Any]) -> bytes:
+def _event_json(
+    ev: dict[str, Any],
+    meta: dict[str, Any],
+    finish_reason: str | None = None,
+    usage: dict[str, Any] | None = None,
+) -> bytes:
     """Render one StreamHealer event as an OpenAI-compatible SSE chunk."""
     if ev["type"] == "tool_calls":
-        out = {
-            "choices": [
-                {
-                    "delta": {"tool_calls": ev["tool_calls"]},
-                    "index": 0,
-                    "finish_reason": "tool_calls" if ev.get("stop") else None,
-                }
-            ]
-        }
+        delta: dict[str, Any] = {"tool_calls": ev["tool_calls"]}
+    elif ev["type"] == "content":
+        delta = {"content": ev.get("text", "")}
     else:
-        out = {
-            "choices": [
-                {
-                    "delta": {"content": ev.get("text", "")},
-                    "index": 0,
-                    "finish_reason": None,
-                }
-            ]
-        }
+        delta = {}
+    out: dict[str, Any] = {
+        **meta,
+        "choices": [
+            {
+                "delta": delta,
+                "index": 0,
+                "finish_reason": finish_reason,
+            }
+        ],
+    }
+    if usage is not None:
+        out["usage"] = usage
     return f"data: {json.dumps(out, separators=(',', ':'))}\n\n".encode()
 
 

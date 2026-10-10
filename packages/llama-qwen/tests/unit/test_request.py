@@ -46,3 +46,106 @@ def test_unknown_keys_preserved():
     out, _ = normalize_chat_request(p)
     assert out["temperature"] == 0.2
     assert out["stream_options"] == {"include_usage": True}
+
+
+# --- assistant history sanitization (from live opencode TUI traces) ---------
+
+
+def _assistant_text(content):
+    return {"role": "assistant", "content": content}
+
+
+def _assistant_tool_calls(name, args_json, call_id="call_x"):
+    return {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {"name": name, "arguments": args_json},
+            }
+        ],
+    }
+
+
+def _user(content):
+    return {"role": "user", "content": content}
+
+
+def test_leaked_text_twin_dropped_before_tool_calls_turn():
+    """Repaired history: leaked-JSON text + structured turn must collapse."""
+    leaked = '{"name": "read", "arguments": {"filePath": "/tmp"}}'
+    msgs = [
+        {"role": "system", "content": "sys"},
+        _user("list"),
+        _assistant_text(leaked),
+        _assistant_tool_calls("read", '{"filePath": "/tmp"}'),
+        {"role": "tool", "tool_call_id": "call_x", "content": "entries"},
+    ]
+    out, notes = normalize_chat_request({"model": "q", "messages": msgs})
+    roles = [m["role"] for m in out["messages"]]
+    assert roles == ["system", "user", "assistant", "tool"], roles
+    a = out["messages"][2]
+    assert a["tool_calls"][0]["function"]["name"] == "read"
+    assert not (a.get("content") or "").strip().startswith("{")
+    assert any("merged" in n for n in notes)
+
+
+def test_text_different_args_kept_both_turns_unmerged():
+    """Leaked-JSON text that does NOT match the next tool call must survive."""
+    leaked = '{"name": "read", "arguments": {"filePath": "/a"}}'
+    msgs = [
+        _user("go"),
+        _assistant_text(leaked),
+        _assistant_tool_calls("read", '{"filePath": "/b"}'),
+        {"role": "tool", "tool_call_id": "call_x", "content": "x"},
+    ]
+    out, _ = normalize_chat_request({"model": "q", "messages": msgs})
+    # the text twin is merged into the assistant turn (text+tool_calls merge)
+    # leaving exactly one assistant message before the tool result
+    roles = [m["role"] for m in out["messages"]]
+    assert roles == ["user", "assistant", "tool"], roles
+
+
+def test_two_adjacent_assistant_texts_deduped_when_identical():
+    answer = "Here are the contents"
+    msgs = [_user("go"), _assistant_text(answer), _assistant_text(answer)]
+    out, notes = normalize_chat_request({"model": "q", "messages": msgs})
+    roles = [m["role"] for m in out["messages"]]
+    assert roles == ["user", "assistant"], roles
+    assert out["messages"][-1]["content"] == answer
+    assert any("deduped" in n for n in notes)
+
+
+def test_two_distinct_assistant_texts_merge_into_last():
+    msgs = [_user("go"), _assistant_text("part one"), _assistant_text("part two")]
+    out, _ = normalize_chat_request({"model": "q", "messages": msgs})
+    assert len(out["messages"]) == 2
+    assert out["messages"][-1]["content"] == "part one\npart two"
+
+
+def test_tool_calls_assistant_then_text_assistant_merges():
+    msgs = [
+        _user("go"),
+        _assistant_tool_calls("bash", '{"command": "ls"}'),
+        _assistant_text("did the thing"),
+        {"role": "tool", "tool_call_id": "call_x", "content": "out"},
+    ]
+    out, _ = normalize_chat_request({"model": "q", "messages": msgs})
+    roles = [m["role"] for m in out["messages"]]
+    assert roles == ["user", "assistant", "tool"], roles
+    a = out["messages"][1]
+    assert a["tool_calls"][0]["function"]["name"] == "bash"
+
+
+def test_clean_history_untouched():
+    msgs = [
+        {"role": "system", "content": "sys"},
+        _user("hi"),
+        _assistant_text("hello"),
+        _user("more"),
+    ]
+    out, notes = normalize_chat_request({"model": "q", "messages": msgs})
+    assert out["messages"] == msgs
+    assert not notes
