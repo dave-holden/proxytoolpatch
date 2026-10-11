@@ -16,6 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from llama_qwen import StreamHealer, extract_tool_calls, normalize_chat_request
+from llama_qwen.request import Backend
 from proxy import trace
 from proxy.conduit import UpstreamConduit
 from proxy.settings import get_settings
@@ -69,6 +70,19 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "upstream": settings.upstream_url}
 
 
+def _resolve_backend(payload: dict[str, Any]) -> Backend:
+    """Backend decision: payload heuristics first, else LMW_BACKEND env (gguf default).
+
+    A model id mentioning mlx, or an explicit mlx-community/HF repo id,
+    implies mlx; anything else defers to settings.backend.
+    """
+    model = str(payload.get("model") or "")
+    if "mlx" in model.lower() or model.startswith("mlx-community/"):
+        return "mlx"
+    resolved: Backend = "mlx" if settings.backend == "mlx" else "gguf"
+    return resolved
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.body()
@@ -78,7 +92,16 @@ async def chat_completions(request: Request):
         return JSONResponse({"error": "invalid JSON body"}, status_code=400)
 
     trace.log("CLIENT->MW", payload)
-    payload, notes = normalize_chat_request(payload, backend="gguf")
+    backend = _resolve_backend(payload)
+    payload, notes = normalize_chat_request(payload, backend=backend)
+    if backend == "mlx":
+        payload.pop("tool_choice", None)
+        notes.append("tool_choice stripped (mlx backend)")
+    # Remap the client-facing model id to what the upstream actually serves.
+    # mlx_lm.server resolves unknown model ids against HF ("Repository Not
+    # Found"); llama-server ignores names, but remapping helps logs too.
+    model = str(payload.get("model") or "qwen")
+    payload["model"] = settings.model_map.get(model, model)
     if notes:
         trace.log("MW.NOTES", notes)
     trace.log("MW->UPSTREAM", payload)
@@ -90,6 +113,15 @@ async def chat_completions(request: Request):
 
 async def _non_streaming(payload: dict[str, Any]):
     upstream = await conduit.forward_json("/v1/chat/completions", payload)
+    if upstream.status_code >= 400:
+        trace.log("UPSTREAM->MW", {"error": upstream.text[:500]})
+        return JSONResponse(
+            {"error": {"message": f"upstream error (HTTP {upstream.status_code}): "
+                       f"{upstream.text[:500]}",
+                       "type": "upstream_error",
+                       "code": upstream.status_code}},
+            status_code=upstream.status_code,
+        )
     try:
         data = upstream.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -124,6 +156,10 @@ def _repair_response(data: dict[str, Any], tool_names: set[str] | None) -> bool:
 async def _streaming(request: Request, payload: dict[str, Any]):
     tool_names = _request_tool_names(payload)
     upstream = await conduit.forward_stream("/v1/chat/completions", payload)
+    if upstream.status_code >= 400:
+        body = await upstream.aread()
+        await upstream.aclose()
+        return _upstream_error_sse(upstream.status_code, body)
 
     async def gen() -> AsyncGenerator[bytes]:
         healer = StreamHealer(tool_names=tool_names)
@@ -207,6 +243,33 @@ def _event_json(
     if usage is not None:
         out["usage"] = usage
     return f"data: {json.dumps(out, separators=(',', ':'))}\n\n".encode()
+
+
+def _upstream_error_sse(status: int, body: bytes) -> StreamingResponse:
+    """Convert an upstream error into a single clean OpenAI-style SSE stream.
+
+    Without this, error pages / SSE keepalives from the upstream leak raw into
+    the client (opencode renders the garbled text or hangs waiting for deltas).
+    """
+    detail = body.decode("utf-8", errors="replace").strip()[:500]
+    msg = f"upstream error (HTTP {status}): {detail}"
+    chunk = {
+        "choices": [
+            {
+                "delta": {"content": msg},
+                "index": 0,
+                "finish_reason": "stop",
+            }
+        ]
+    }
+    payload = (
+        b"data: " + json.dumps(chunk, separators=(",", ":")).encode() + b"\n\ndata: [DONE]\n\n"
+    )
+    return StreamingResponse(
+        iter([payload]),
+        media_type="text/event-stream",
+        status_code=200,
+    )
 
 
 @app.get("/v1/models")
