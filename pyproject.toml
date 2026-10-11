@@ -3,6 +3,9 @@ name = "llama-middleware-workspace"
 version = "0.0.0"
 description = "Workspace root: global dev tooling + shared configs for the llama-middleware sub-projects"
 requires-python = ">=3.14.2"
+dependencies = [
+    "mlx-lm>=0.32.0",
+]
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
