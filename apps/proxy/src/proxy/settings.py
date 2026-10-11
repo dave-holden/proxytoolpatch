@@ -31,6 +31,16 @@ class Settings:
         self.upstream_url: str = os.environ.get(
             "LMW_UPSTREAM_URL", "http://127.0.0.1:8181"
         )
+        # Total seconds the middleware waits on an upstream request. Long
+        # model loads / cold-starts (llama-swap spins a backend on demand)
+        # need a large read window; SSE reads ride the read timeout too.
+        self.upstream_timeout: float = float(
+            os.environ.get("LMW_UPSTREAM_TIMEOUT", "300")
+        )
+        # Optional static bearer token sent as Authorization to the upstream
+        # (for llama-swap gateways / llama-server --api-key). Client auth
+        # headers are forwarded per-request separately in the conduit.
+        self.upstream_api_key: str = os.environ.get("LMW_UPSTREAM_API_KEY", "")
         self.backend: str = os.environ.get("LMW_BACKEND", "gguf")
         self.trace: bool = (os.environ.get("LMW_TRACE", "") == "1"
                             or os.environ.get("LMW_TRACE_FILE", "") != "")
