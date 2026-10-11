@@ -35,6 +35,8 @@ app = FastAPI(title="llama-middleware proxy")
 
 PASS_HEADERS_OUT = ("content-type", "x-request-id")
 
+_UPSTREAM_MODELS: list[str] | None = None  # lazily discovered, cached
+
 
 def _request_tool_names(payload: dict[str, Any]) -> set[str] | None:
     tools = payload.get("tools")
@@ -69,6 +71,34 @@ def _sse_events(raw: bytes) -> list[tuple[str, dict[str, Any] | None]]:
         elif line.strip():
             out.append(("raw", None))
     return out
+
+
+async def _resolve_model(model: str) -> str:
+    """Map a client-facing model id to one the upstream actually serves.
+
+    Order: LMW_MODEL_MAP → upstream /v1/models membership → single loaded
+    model. mlx_lm.server resolves unknown model ids against HF (401/404
+    "Repository Not Found"), so an unmapped alias must never be forwarded
+    raw when the real id is discoverable.
+    """
+    mapped = settings.model_map.get(model)
+    if mapped:
+        return mapped
+    global _UPSTREAM_MODELS
+    if _UPSTREAM_MODELS is None:
+        try:
+            upstream = await conduit.passthrough("GET", "v1/models", {}, b"")
+            data = upstream.json().get("data", [])
+            _UPSTREAM_MODELS = [m.get("id", "") for m in data if isinstance(m, dict)]
+        except Exception:
+            _UPSTREAM_MODELS = []  # unreachable/mock — keep alias as-is
+        trace.log("MW.MODELS", _UPSTREAM_MODELS)
+    known = [m for m in _UPSTREAM_MODELS if m]
+    if model in known:
+        return model
+    if len(known) == 1:
+        return known[0]
+    return model
 
 
 @app.get("/health")
@@ -107,7 +137,7 @@ async def chat_completions(request: Request):
     # mlx_lm.server resolves unknown model ids against HF ("Repository Not
     # Found"); llama-server ignores names, but remapping helps logs too.
     model = str(payload.get("model") or "qwen")
-    payload["model"] = settings.model_map.get(model, model)
+    payload["model"] = await _resolve_model(model)
     if notes:
         trace.log("MW.NOTES", notes)
     trace.log("MW->UPSTREAM", payload)
