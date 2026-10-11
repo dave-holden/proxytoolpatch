@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -96,9 +97,37 @@ async def _resolve_model(model: str) -> str:
     known = [m for m in _UPSTREAM_MODELS if m]
     if model in known:
         return model
-    if len(known) == 1:
-        return known[0]
-    return model
+    best = _pick_by_alias(model, known)
+    return best or model
+
+
+def _pick_by_alias(alias: str, known: list[str]) -> str | None:
+    """Best upstream id for an unmapped alias, or None to pass through.
+
+    Scores each upstream id by token overlap with the alias (e.g.
+    ``qwen-mlx`` → tokens {qwen, mlx}). Ties prefer the artifact the server
+    was actually launched with — a filesystem path beats an HF repo id,
+    which matters when the cache contains several Qwen mlx snapshots.
+    """
+    tokens = {t for t in re.split(r"[-/_ .]", alias.lower()) if t}
+    if not tokens:
+        return None
+    scored: list[tuple[int, int, str]] = []
+    for mid in known:
+        low = mid.lower()
+        overlap = sum(1 for t in tokens if t in re.split(r"[-/_ .]", low))
+        if overlap == 0:
+            continue
+        path_like = 1 if (mid.startswith("/") or "snapshots/" in mid) else 0
+        scored.append((overlap, path_like, mid))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    top_overlap, top_path, _ = scored[0]
+    winners = [s for s in scored if (s[0], s[1]) == (top_overlap, top_path)]
+    if len(winners) != 1:
+        return None  # genuinely ambiguous — don't guess
+    return winners[0][2]
 
 
 @app.get("/health")
