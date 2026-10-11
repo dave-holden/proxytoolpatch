@@ -35,6 +35,9 @@ class Settings:
         self.trace: bool = (os.environ.get("LMW_TRACE", "") == "1"
                             or os.environ.get("LMW_TRACE_FILE", "") != "")
         self.model_map: dict[str, str] = _model_map()
+        # LoopGuard thresholds (0 disables that escape entirely).
+        self.loop_nudge: int = int(os.environ.get("LMW_LOOP_NUDGE", "3") or 0)
+        self.loop_abort: int = int(os.environ.get("LMW_LOOP_ABORT", "6") or 0)
 
 
 def get_settings() -> Settings:

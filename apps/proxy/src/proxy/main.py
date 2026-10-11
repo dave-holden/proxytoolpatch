@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -19,11 +20,16 @@ from llama_qwen import StreamHealer, extract_tool_calls, normalize_chat_request
 from llama_qwen.request import Backend
 from proxy import trace
 from proxy.conduit import UpstreamConduit
+from proxy.loopguard import ABORT_TEXT, NUDGE_TEXT, LoopGuard
 from proxy.settings import get_settings
 
 settings = get_settings()
 trace.enable(settings.trace)
 conduit = UpstreamConduit(settings.upstream_url)
+loop_guard = LoopGuard(
+    nudge_after=settings.loop_nudge,
+    abort_after=settings.loop_abort,
+)
 
 app = FastAPI(title="llama-middleware proxy")
 
@@ -105,6 +111,19 @@ async def chat_completions(request: Request):
     if notes:
         trace.log("MW.NOTES", notes)
     trace.log("MW->UPSTREAM", payload)
+
+    # LoopGuard: identical consecutive prompts make llama-server replay the
+    # same continuation forever. Nudge the model, then cut the loop off.
+    decision = loop_guard.check(LoopGuard.request_key(payload))
+    trace.log("MW.GUARD", {"action": decision.action, "count": decision.count})
+    if decision.action == "abort":
+        return _loop_guard_abort(decision.count, stream=bool(payload.get("stream")))
+    if decision.action == "nudge":
+        payload["messages"] = [
+            *payload["messages"],
+            {"role": "user", "content": NUDGE_TEXT},
+        ]
+        trace.log("MW->UPSTREAM", payload)
 
     if payload.get("stream"):
         return await _streaming(request=request, payload=payload)
@@ -268,6 +287,52 @@ def _upstream_error_sse(status: int, body: bytes) -> StreamingResponse:
     return StreamingResponse(
         iter([payload]),
         media_type="text/event-stream",
+        status_code=200,
+    )
+
+
+def _loop_guard_abort(count: int, stream: bool) -> Response | StreamingResponse:
+    """Return a clean, short completion explaining the cut-off."""
+    text = ABORT_TEXT.format(count=count)
+    created = int(time.time())
+    if stream:
+        first = {
+            "id": "loopguard-abort",
+            "created": created,
+            "model": "loopguard",
+            "choices": [
+                {"delta": {"role": "assistant", "content": text},
+                 "index": 0, "finish_reason": None}
+            ],
+        }
+        last = {
+            "id": "loopguard-abort",
+            "created": created,
+            "model": "loopguard",
+            "choices": [
+                {"delta": {}, "index": 0, "finish_reason": "stop"}
+            ],
+        }
+        sse = "".join(
+            f"data: {json.dumps(c, separators=(',', ':'))}\n\n" for c in (first, last)
+        ) + "data: [DONE]\n\n"
+        return StreamingResponse(
+            iter([sse.encode()]), media_type="text/event-stream", status_code=200
+        )
+    return JSONResponse(
+        {
+            "id": "loopguard-abort",
+            "created": created,
+            "model": "loopguard",
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": text},
+                    "index": 0,
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        },
         status_code=200,
     )
 
