@@ -191,8 +191,10 @@ def test_mlx_backend_strips_tool_choice_and_maps_model(client, monkeypatch):
         async def aread(self):
             return b""
 
-    async def fake_forward_stream(path, payload):
+    async def fake_forward_stream(path, payload, headers=None):
         captured.update(payload)
+        if headers is not None:
+            captured["__headers"] = headers
         return _FakeResp()
 
     monkeypatch.setattr(main_mod.conduit, "forward_stream", fake_forward_stream)

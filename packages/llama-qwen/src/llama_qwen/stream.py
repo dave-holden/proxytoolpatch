@@ -105,5 +105,15 @@ class StreamHealer:
         fence = buf[-len(_FENCE_MARK):] if len(buf) >= len(_FENCE_MARK) else buf
         if _FENCE_MARK.startswith(fence) or buf.count(_FENCE_MARK) % 2 == 1:
             return True
-        raw_open = bool(buf) and buf.rstrip().endswith(_BRACE) and _JSON_BRACE in buf[-64:]
-        return raw_open
+        # Any leading '{' opens a candidate tool-call object until either the
+        # extractor resolves it (feed re-checks each delta) or max_buffer
+        # forces release. The replayed mlx stream showed a bare {"name"...}
+        # object released before its arguments were complete.
+        stripped = buf.lstrip()
+        # Hold while the buffer is *only* a candidate JSON object (nothing but
+        # whitespace before the opening brace) and still under max_buffer.
+        return bool(
+            stripped.startswith(_BRACE)
+            and len(stripped) < self._max
+            and not buf[: len(buf) - len(stripped)].strip()
+        )

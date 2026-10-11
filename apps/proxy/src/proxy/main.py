@@ -26,7 +26,11 @@ from proxy.settings import get_settings
 
 settings = get_settings()
 trace.enable(settings.trace)
-conduit = UpstreamConduit(settings.upstream_url)
+conduit = UpstreamConduit(
+    settings.upstream_url,
+    timeout=settings.upstream_timeout,
+    api_key=settings.upstream_api_key,
+)
 loop_guard = LoopGuard(
     nudge_after=settings.loop_nudge,
     abort_after=settings.loop_abort,
@@ -185,12 +189,19 @@ async def chat_completions(request: Request):
         trace.log("MW->UPSTREAM", payload)
 
     if payload.get("stream"):
-        return await _streaming(request=request, payload=payload)
-    return await _non_streaming(payload=payload)
+        return await _streaming(
+            request=request, payload=payload,
+            client_headers={k.lower(): v for k, v in request.headers.items()},
+        )
+    return await _non_streaming(payload=payload, client_headers=
+        {k.lower(): v for k, v in request.headers.items()})
 
 
-async def _non_streaming(payload: dict[str, Any]):
-    upstream = await conduit.forward_json("/v1/chat/completions", payload)
+async def _non_streaming(payload: dict[str, Any],
+                         client_headers: dict[str, str] | None = None):
+    upstream = await conduit.forward_json(
+        "/v1/chat/completions", payload, headers=client_headers
+    )
     if upstream.status_code >= 400:
         trace.log("UPSTREAM->MW", {"error": upstream.text[:500]})
         return JSONResponse(
@@ -231,9 +242,12 @@ def _repair_response(data: dict[str, Any], tool_names: set[str] | None) -> bool:
     return repaired
 
 
-async def _streaming(request: Request, payload: dict[str, Any]):
+async def _streaming(request: Request, payload: dict[str, Any],
+                     client_headers: dict[str, str] | None = None):
     tool_names = _request_tool_names(payload)
-    upstream = await conduit.forward_stream("/v1/chat/completions", payload)
+    upstream = await conduit.forward_stream(
+        "/v1/chat/completions", payload, headers=client_headers
+    )
     if upstream.status_code >= 400:
         body = await upstream.aread()
         await upstream.aclose()
