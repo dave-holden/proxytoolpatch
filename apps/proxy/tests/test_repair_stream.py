@@ -133,6 +133,85 @@ def test_stream_unterminated_upstream_gets_synthetic_stop(client, mock_upstream)
     assert "stop" in fin
 
 
+def test_stream_upstream_error_becomes_clean_sse_finish(client, mock_upstream):
+    """An upstream 4xx/5xx must arrive as ONE clean terminating SSE chunk."""
+    body = {
+        "model": "qwen",
+        "stream": True,
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [TOOL],
+    }
+    mock_upstream.post("/v1/chat/completions").respond(
+        status_code=404, content='{"error": "Repository Not Found for url: m"}',
+        headers={"content-type": "application/json"},
+    )
+    res = client.post("/v1/chat/completions", json=body)
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/event-stream")
+    events = [
+        json.loads(line[6:])
+        for line in res.text.splitlines()
+        if line.startswith("data: ") and line != "data: [DONE]"
+    ]
+    assert len(events) == 1
+    delta = events[0]["choices"][0]["delta"]
+    assert "Repository Not Found" in delta["content"]
+    assert events[0]["choices"][0]["finish_reason"] == "stop"
+    assert res.text.strip().endswith("data: [DONE]")
+
+
+def test_mlx_backend_strips_tool_choice_and_maps_model(client, monkeypatch):
+    """LMW_BACKEND=mlx + alias map: tool_choice dropped, model remapped upward."""
+    import importlib
+
+    monkeypatch.setenv("LMW_BACKEND", "mlx")
+    monkeypatch.setenv(
+        "LMW_MODEL_MAP",
+        '{"qwen-mlx": "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"}',
+    )
+    from proxy import settings as settings_mod
+    importlib.reload(settings_mod)
+    import proxy.main as main_mod
+    importlib.reload(main_mod)  # pick up reloaded settings + fresh conduit settings
+
+    captured: dict = {}
+
+    class _FakeResp:
+        status_code = 200
+
+        def __init__(self) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            yield _sse(_delta("ok"))
+
+        async def aclose(self):
+            pass
+
+        async def aread(self):
+            return b""
+
+    async def fake_forward_stream(path, payload):
+        captured.update(payload)
+        return _FakeResp()
+
+    monkeypatch.setattr(main_mod.conduit, "forward_stream", fake_forward_stream)
+
+    body = {
+        "model": "qwen-mlx",
+        "stream": True,
+        "messages": [{"role": "user", "content": "list files"}],
+        "tools": [TOOL],
+        "tool_choice": "auto",
+        "stream_options": {"include_usage": True},
+    }
+    res = client.post("/v1/chat/completions", json=body)
+    assert res.status_code == 200
+    assert "tool_choice" not in captured, "tool_choice must be stripped for mlx"
+    assert captured["model"] == "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+    assert "tools" in captured  # tools survive the mlx backend for repair
+
+
 def test_stream_plain_answer_not_mangled(client, mock_upstream):
     body = {
         "model": "qwen",
