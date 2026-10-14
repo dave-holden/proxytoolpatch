@@ -1,0 +1,50 @@
+name: publish toolpatch + proxytool
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  tests-gate:
+    uses: ./.github/workflows/test.yml
+
+  build-and-publish:
+    needs: tests-gate
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI trusted publishing (preferred) — set up once on PyPI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: build toolpatch
+        run: |
+          cd packages/toolpatch
+          uv build
+          ls dist/
+      - name: build proxytool (app wheel — declares toolpatch + console script)
+        run: |
+          cd apps/proxytool
+          uv build
+          ls dist/
+      - name: publish to testpypi on rc tags
+        if: ${{ contains(github.ref_name, 'rc') }}
+        run: |
+          cd packages/toolpatch
+          uv publish --publish-url https://test.pypi.org/legacy/ dist/*
+          cd ../../apps/proxytool
+          uv publish --publish-url https://test.pypi.org/legacy/ dist/*
+      - name: publish to pypi
+        if: ${{ !contains(github.ref_name, 'rc') }}
+        run: |
+          cd packages/toolpatch
+          uv publish dist/*
+          cd ../../apps/proxytool
+          uv publish dist/*
+      - name: smoke-test installs in clean venv (library + app CLI on PATH)
+        run: |
+          cd /tmp
+          uv venv smoke && uv pip install --python smoke/bin/python proxytool
+          smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
+          smoke/bin/proxytool version   # proves the console-script entry point

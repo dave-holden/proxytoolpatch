@@ -1,11 +1,12 @@
 [project]
-name = "llama-middleware-workspace"
+name = "proxytoolpatch"
 version = "0.0.0"
-description = "Workspace root: global dev tooling + shared configs for the llama-middleware sub-projects"
-requires-python = ">=3.14.2"
-dependencies = [
-    "mlx-lm>=0.32.0",
-]
+description = "Workspace root: global dev tooling + shared configs for the proxytoolpatch sub-projects"
+requires-python = ">=3.10"
+# No hard runtime deps at the workspace root on purpose: dev deps live in the
+# dependency-groups below; model-server runtimes (mlx-lm etc.) belong to the
+# backend you launch, not to this meta-package.
+dependencies = []
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
@@ -17,29 +18,38 @@ dev = [
     "respx>=0.23",
     "ruff>=0.14",
     "pyright>=1.1.407",
+    "nox>=2024.10",
+    # Keep stdlib-backport imports resolvable for type-checking on any venv
+    # python (the runtime dep on proxytool is gated to python<3.11).
+    "tomli>=2.0",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/proxy/tests", "packages/llama-qwen/tests"]
+testpaths = ["apps/proxytool/tests", "packages/toolpatch/tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
-src = ["apps/proxy/src", "packages/llama-qwen/src"]
+target-version = "py310"
+src = ["apps/proxytool/src", "packages/toolpatch/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
 
 [tool.pyright]
 typeCheckingMode = "standard"
+# Check against the lowest supported floor so version-gated imports
+# (tomllib/tomli in proxytool.config) resolve the way they will at runtime.
+pythonVersion = "3.10"
 include = [
-    "apps/proxy/src",
-    "packages/llama-qwen/src",
-    "apps/proxy/tests",
-    "packages/llama-qwen/tests",
+    "apps/proxytool/src",
+    "packages/toolpatch/src",
+    "apps/proxytool/tests",
+    "packages/toolpatch/tests",
 ]
 exclude = ["**/__pycache__", ".venv", "scripts"]
-venvPath = "."
-venv = ".venv"
+# No venvPath/venv pin: pyright resolves imports from the environment it runs
+# in (PATH/VIRTUAL_ENV), which CI provisions via
+# `uv run --python 3.10 --isolated --all-packages`. A pinned root .venv would
+# not exist in CI and goes stale locally whenever packages change.
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#
 # dev-rig.sh — one-command rig: backend on 8181 + middleware on 8180.
 # Runs until Ctrl-C; middlewares/upstreams started here keep running while it does.
 #
@@ -93,8 +94,14 @@ wait_for "http://127.0.0.1:$UP_PORT/health" "upstream"
 # LMW_BACKEND must match the real backend (mlx strips tool_choice on request side)
 export LMW_BACKEND="$BACKEND"
 export LMW_TRACE
-echo "[rig] middleware: proxy.main:app on :$MW_PORT (LMW_TRACE=$LMW_TRACE) — Ctrl-C stops all"
-uv run uvicorn proxy.main:app --host 127.0.0.1 --port "$MW_PORT" &
+# Map the opencode alias (qwen-<backend>) to the model the upstream serves so
+# mlx_lm.server never resolves the alias against HF (401/404 Repo Not Found).
+if [[ "$BACKEND" != "fake" ]]; then
+  export LMW_MODEL_MAP="${LMW_MODEL_MAP:-{\"qwen-${BACKEND}\": \"${MODEL_ARG}\"}}"
+  echo "[rig] LMW_MODEL_MAP: $LMW_MODEL_MAP"
+fi
+echo "[rig] middleware: proxytool on :$MW_PORT (LMW_TRACE=$LMW_TRACE) — Ctrl-C stops all"
+uv run proxytool serve --host 127.0.0.1 --port "$MW_PORT" &
 PIDS+=("$!")
 wait_for "http://127.0.0.1:$MW_PORT/health" "middleware"
 
@@ -103,7 +110,7 @@ echo "[rig] smoke:  curl -s http://127.0.0.1:$MW_PORT/v1/chat/completions -H 'Co
 
 if [[ "$RUN_UV_TEST" == "1" ]]; then
   echo "[rig] running live E2E test (LMW_LIVE=1)..."
-  LMW_LIVE=1 uv run pytest apps/proxy/tests/test_live_qwen.py -q || {
+  LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_qwen.py -q || {
     echo "[rig] live test FAILED" >&2
     exit 1
   }

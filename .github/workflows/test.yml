@@ -1,0 +1,50 @@
+name: test & checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Every job expresses its intent through a nox session (noxfile.py) instead of
+# hand-written uv commands: nox is the single source of truth for what
+# "tested/checked" means, so adding a Python version or session there is all
+# that is needed — CI picks it up. The GH matrix below exists only for
+# per-cell visibility in the Actions UI; each cell calls exactly one
+# parametrized nox session.
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv run nox -s lint
+
+  test-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        module: [toolpatch, proxytool]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: nox test_${{ matrix.module }} on py${{ matrix.python-version }}
+        run: >
+          uv run nox -s
+          "test_${{ matrix.module }}(python='${{ matrix.python-version }}')"
+
+  pyright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.10" # lowest floor — the nox pyright session pins 3.10 too
+      - run: uv run nox -s pyright
