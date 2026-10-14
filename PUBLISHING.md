@@ -1,10 +1,16 @@
 # PUBLISHING.md
 
-How to publish `llama-qwen` to PyPI (and optionally the `proxy` app privately).
+How to publish `toolpatch` and `proxytool` to PyPI.
 
-**You publish ONE package: `llama-qwen`** (the pure-logic repair engine).
-`proxy` is the application wrapper — typically run from source via `uv run`,
-not installed from PyPI.
+**Both packages publish from this workspace** (tag `v*` →
+`.github/workflows/publish.yml` builds + uploads both, gated on the full test
+matrix):
+
+- **`toolpatch`** — the pure-logic repair engine. Import-name dependency-free
+  beyond `pydantic`; installable by any Python server needing leak repair.
+- **`proxytool`** — the FastAPI middleware + CLI. Depends on `toolpatch`,
+  `fastapi`, `uvicorn`, `httpx`. Its `[project.scripts]` entry-point puts the
+  `proxytool` command on the installer's PATH automatically.
 
 ---
 
@@ -24,26 +30,27 @@ Create a PyPI account and an API token at <https://pypi.org/manage/account/token
 ## 2. Pre-publish checklist (every release)
 
 ```bash
-# 1. Versions bumped in ALL relevant pyproject.toml files (Patch/Minor/Major rules below)
-grep -H '^version' packages/llama-qwen/pyproject.toml apps/proxy/pyproject.toml
+# 1. Versions bumped in BOTH pyproject.toml files (Patch/Minor/Major rules below)
+grep -H '^version' packages/toolpatch/pyproject.toml apps/proxytool/pyproject.toml
 
 # 2. RELEASE.md has a new section: "## vX.Y.Z (YYYY-MM-DD)" + bullet changes
 # 3. Checks green
 uv run pytest                      # full suite
 uv run ruff check .
 uv run pyright
+./scripts/test-matrix.sh           # or: python3 scripts/test_matrix.py
 
-# 4. Build test
-uv run build -- Wheel ./
+# 4. Build test (both members)
+(cd packages/toolpatch && uv build) && (cd apps/proxytool && uv build)
 ```
 
 ### Version bump rules
 
-| Change type                       | Bumb | Example                          |
+| Change type                       | Bump | Example                          |
 | --------------------------------- | ---- | -------------------------------- |
-| Bug fix, no new API               | Patch| `0.2.0` → `0.2.1`                |
-| New extractor pattern, new option | Minor| `0.2.0` → `0.3.0`                |
-| Breaking change to public API     | Major| `0.x.0` → `1.0.0`                |
+| Bug fix, no new API               | Patch| `1.0.0` → `1.0.1`                |
+| New extractor pattern, new option | Minor| `1.0.0` → `1.1.0`                |
+| Breaking change to public API     | Major| `1.0.0` → `2.0.0`                |
 
 New **real-world** misformatting fixtures and their heal rules = **Minor**
 (they add capability without removing any).
@@ -53,25 +60,25 @@ New **real-world** misformatting fixtures and their heal rules = **Minor**
 ## 3. Name availability — check **before** relying on a name
 
 ```bash
-# is llama-qwen free on PyPI?
-curl -s https://pypi.org/pypi/llama-qwen/json | head -n 1
+# is toolpatch free on PyPI?
+curl -s https://pypi.org/pypi/toolpatch/json | head -n 1
 # HTTP 200 → taken; 404 → free
 ```
 
-Name quality criteria for `llama-qwen`:
+Name quality criteria for `toolpatch`:
 
 - **Describable:** says what it does (llama + qwen).
-- **Caveat:** `llama-qwen` strongly implies "for llama.cpp and Qwen" — which is
+- **Caveat:** `toolpatch` strongly implies "for llama.cpp and Qwen" — which is
   exactly what the package is today, but if you ever want to support
   non-Qwen/tool-calling models generically, consider a more general name such
   as **`toolcall-repair`**, **`hermes-heal`**, or **`sse-toolfix`**.
 - **Searchable:** lowercase, hyphen friendly (PyPI normalizes `_`/`-`/`.` —
-  `llama_qwen`, `llama-qwen`, `llama.qwen` all resolve to the same project).
+  `toolpatch`, `toolpatch`, `llama.qwen` all resolve to the same project).
 - **Unique enough:** avoid a name already in heavy use; test with the curl above.
 
-**Recommendation for v0.x:** keep `llama-qwen` (exact + descriptive), and
+**Recommendation for v0.x:** keep `toolpatch` (exact + descriptive), and
 consider a general rename only before `1.0.0` because that is a breaking
-change to imports (`from llama_qwen import ...`).
+change to imports (`from toolpatch import ...`).
 
 ---
 
@@ -81,9 +88,9 @@ From the repo root:
 
 ```bash
 # build the package into dist/
-cd packages/llama-qwen
+cd packages/toolpatch
 uv build
-ls dist/                   # llama_qwen-0.2.0-py3-none-any.whl + .tar.gz
+ls dist/                   # toolpatch-0.2.0-py3-none-any.whl + .tar.gz
 ```
 
 Inspect the wheel contents (verify README, LICENSE included):
@@ -100,11 +107,11 @@ unzip -l dist/*.whl
 # test first on TestPyPI (safe, throws away nothing)
 uv build
 uvx twine upload --repository testpypi --non-interactive dist/*
-# confirm at https://test.pypi.org/project/llama-qwen/
+# confirm at https://test.pypi.org/project/toolpatch/
 
 # then real PyPI
 uvx twine upload --non-interactive dist/*
-# confirm at https://pypi.org/project/llama-qwen/
+# confirm at https://pypi.org/project/toolpatch/
 ```
 
 With keyring instead of a plaintext token:
@@ -136,11 +143,11 @@ In a throwaway venv **outside** the workspace:
 
 ```bash
 cd /tmp && uv venv smoke && source smoke/bin/activate
-uv pip install --index-url https://pypi.org/simple llama-qwen
+uv pip install --index-url https://pypi.org/simple toolpatch
 python - <<'PY'
-import llama_qwen
-print(llama_qwen.__all__)
-out, notes = llama_qwen.normalize_chat_request(
+import toolpatch
+print(toolpatch.__all__)
+out, notes = toolpatch.normalize_chat_request(
     {"model": "m", "messages": [{"role": "user", "content": "hi"}]}
 )
 print(out, notes)

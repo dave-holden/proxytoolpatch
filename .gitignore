@@ -23,7 +23,12 @@ Running.md
 
 history.txt
 
-config/
+config/*
+!config/opencode.jsonc
+!config/opencode-gguf.jsonc
+!config/opencode-mlx.jsonc
+!config/pi-models.json
+!config/proxytool-example.toml
 
 **/.DS_Store
 *.pyo
@@ -31,3 +36,7 @@ config/
 __pycache__
 
 main.py
+
+oc-stderr.log
+
+scripts/

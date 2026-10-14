@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "share": "disabled",
+
+  "provider": {
+    "proxytool": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "proxytool",
+      "options": {
+        "apiKey": "not-needed",
+        // note: keep the /v1 suffix — @ai-sdk/openai-compatible appends
+        // "chat/completions" directly to baseURL, so without /v1 the request
+        // lands on the catch-all passthrough route and bypasses the tool-call repair.
+        "baseURL": "http://127.0.0.1:8180/v1",
+      },
+      "models": {
+        "qwen-gguf": {
+          "name": "Qwen GGUF via proxytool"
+        },
+        "qwen-mlx": {
+          "name": "Qwen MLX via proxytool"
+        }
+      }
+    }
+  },
+
+  "model": "proxytool/qwen-gguf",
+  "small_model": "proxytool/qwen-gguf",
+  "mcp": {},
+  "plugin": []
+}

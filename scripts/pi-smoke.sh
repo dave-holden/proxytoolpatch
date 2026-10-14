@@ -8,7 +8,7 @@
 # Assumes:
 #   - the rig is running (./scripts/dev-rig.sh mlx|gguf|omlx <model>)
 #   -/pi is installed (curl -fsSL https://pi.dev/install.sh | sh)
-#   - ~/.pi/agent/models.json contains the llamamw provider
+#   - ~/.pi/agent/models.json contains the proxytool provider
 #     (copy config/pi-models.json, see README §pi).
 
 set -euo pipefail
@@ -64,7 +64,7 @@ if command -v "$PI_BIN" > /dev/null; then
   echo "empty sandbox project" > "$TMPDIR/proj/README.md"
   echo "[smoke] pi one-shot turn in $TMPDIR/proj ..."
   (cd "$TMPDIR/proj" && "$PI_BIN" \
-      --provider llamamw --model qwen-mlx \
+      --provider proxytool --model qwen-mlx \
       -p 'Use the list_dir tool to show me the contents of the current directory. Do not read any files; just list.' \
       > "$TMPDIR/pi-out.txt" 2>&1) || {
     echo "[smoke] FAIL: pi exited nonzero" >&2; cat "$TMPDIR/pi-out.txt" >&2; exit 1;
