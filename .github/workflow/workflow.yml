@@ -1,0 +1,19 @@
+# `.github/workflow/workflow.yml` — the canonical single-workflow path PyPI's
+# provenance / attestation display looks for on release pages ("Publisher:
+# workflow.yml on <org>/<repo>"). This repo's real logic lives in the plural
+# directory (`.github/workflows/{test,publish}.yml`) — this file is a thin
+# entrypoint that runs the same full gate, so anything passed via this
+# canonical path is equivalent to the rich workflows.
+
+name: workflow (canonical entrypoint)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    uses: ./.github/workflows/test.yml

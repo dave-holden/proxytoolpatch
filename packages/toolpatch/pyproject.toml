@@ -1,0 +1,15 @@
+[project]
+name = "toolpatch"
+version = "1.0.0"
+description = "LLM tool-calling protocol repairer (pure logic, offline-testable)"
+readme = "README.md"
+authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = ["pydantic>=2.9"]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "toolpatch"

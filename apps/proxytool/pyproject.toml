@@ -1,0 +1,28 @@
+[project]
+name = "proxytool"
+version = "1.0.0"
+description = "FastAPI middleware conduit standing between agent clients and Qwen servers"
+readme = "../../README.md"
+authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "toolpatch",
+    "fastapi>=0.115",
+    "pydantic>=2.9",   # direct import: proxytool.config strict TOML validation
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[tool.uv.sources]
+toolpatch = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "proxytool"
+
+[project.scripts]
+proxytool = "proxytool.cli:main"
