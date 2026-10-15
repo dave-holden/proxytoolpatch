@@ -16,6 +16,7 @@ dev = [
     "pytest>=9.0",
     "pytest-asyncio>=1.0",
     "respx>=0.23",
+    "coverage>=7",
     # starlette>=1.7 TestClient prefers httpx2; without it it falls back to
     # the legacy httpx and emits a StarletteDeprecationWarning on every run.
     "httpx2>=2.13",
@@ -30,6 +31,20 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["apps/proxytool/tests", "packages/toolpatch/tests"]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["toolpatch", "proxytool"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise RuntimeError",          # starlette testclient fallback guard
+    "if __name__ == .__main__.",
+]
 
 [tool.ruff]
 line-length = 100

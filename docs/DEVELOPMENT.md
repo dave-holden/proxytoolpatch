@@ -34,8 +34,14 @@ of either published module. Everything below works from a **fresh clone**:
 ```bash
 uv run nox -s lint        # ruff
 uv run pytest             # full local test suite
+uv run nox -s coverage    # branch coverage over both modules (3.10 floor)
 FULL_MATRIX=1 git push    # run the whole 3.10–3.14 matrix in the pre-push gate (if wired)
 ```
+
+The `dev` dependency group includes `httpx2` — since starlette ≥ 1.7 the
+`fastapi.testclient` TestClient prefers it, and without it every pytest run
+warns via starlette's legacy `httpx` fallback. Plain `httpx` stays the
+runtime dependency (the proxy conduit imports it directly).
 
 - **pre-push/pre-commit hooks** (optional): a `scripts/pre-push-gate.sh`
   wired via `git config core.hooksPath scripts/hooks` run `ruff` + pytest;
@@ -49,6 +55,7 @@ FULL_MATRIX=1 git push    # run the whole 3.10–3.14 matrix in the pre-push gat
 uv run nox -s lint                        # ruff only
 uv run nox -s pyright                     # type-check on the 3.10 floor (as CI)
 uv run nox -s test                        # full matrix: 2 modules × 3.10–3.14
+uv run nox -s coverage                    # branch coverage, local convenience
 uv run nox -s 'test_toolpatch(python="3.11")'   # one slice
 ```
 

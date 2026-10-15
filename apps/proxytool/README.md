@@ -482,6 +482,7 @@ attempts"). A different request resets the count.
 uv run pytest          # unit + regression + proxy integration (fixtures in packages/toolpatch/tests/regression)
 uv run ruff check .
 uv run pyright
+uv run nox -s coverage # branch coverage over both modules (report printed)
 ```
 
 New real-world misformattings captured from your model should be added as

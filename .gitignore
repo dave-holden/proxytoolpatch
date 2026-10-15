@@ -63,3 +63,7 @@ probe_test_const.py
 examples/opencode-gguf.jsonc
 examples/opencode-mlx.jsonc
 examples/proxytool/proxytool.toml
+
+# coverage artifacts
+htmlcov/
+coverage.xml

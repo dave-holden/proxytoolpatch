@@ -50,6 +50,18 @@ def lint(session: nox.Session) -> None:
 
 
 @nox.session(venv_backend="none")
+def coverage(session: nox.Session) -> None:
+    """Branch coverage over both modules, measured on the 3.10 floor."""
+    # --all-packages: the checker's env must contain the real dependencies
+    # (fastapi, tomli, …) for import resolution — not just the dev group.
+    argv = ["uv", "run", "--python", "3.10", "--isolated", "--all-packages",
+            "--group", "dev", "coverage", "run", "-m", "pytest", "-q"]
+    session.run(*argv, external=True)
+    session.run("uv", "run", "--group", "dev", "coverage", "report",
+                "--skip-covered", external=True)
+
+
+@nox.session(venv_backend="none")
 def pyright(session: nox.Session) -> None:
     """Type-check on the lowest supported Python (3.10) — mirrors CI."""
     # --all-packages: the checker's env must contain the real dependencies
