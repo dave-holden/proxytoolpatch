@@ -59,3 +59,7 @@ debug_hermes.py
 probe_extract.py
 probe_stream.py
 probe_test_const.py
+
+examples/opencode-gguf.jsonc
+examples/opencode-mlx.jsonc
+examples/proxytool/proxytool.toml
