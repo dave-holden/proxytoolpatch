@@ -67,3 +67,7 @@ examples/proxytool/proxytool.toml
 # coverage artifacts
 htmlcov/
 coverage.xml
+
+/docs/DEVELOPMENT.md
+/PLAN.md
+/PUBLISHING.md

@@ -39,7 +39,8 @@ proxytool serve --backend gguf \
 ```
 
 **mlx_lm.server**: same two options as above (`--upstream-url` or
-`--backend mlx --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit`).
+`--model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit` — the `mlx` backend
+kind is inferred from the id).
 
 **Client aliases** (`qwen-gguf`, `qwen-mlx`) are meaningless to the upstream —
 they must map to real model ids via `--model-map` or the `[model_map]` section

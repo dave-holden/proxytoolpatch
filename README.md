@@ -4,6 +4,12 @@
 
 # proxytoolpatch workspace
 
+[![test & checks](https://github.com/dave-holden/proxytoolpatch/actions/workflows/test.yml/badge.svg)](https://github.com/dave-holden/proxytoolpatch/actions/workflows/test.yml)
+[![publish toolpatch + proxytool](https://github.com/dave-holden/proxytoolpatch/actions/workflows/publish.yml/badge.svg)](https://github.com/dave-holden/proxytoolpatch/actions/workflows/publish.yml)
+[![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)](https://www.python.org)
+[![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![PyPI toolpatch](https://img.shields.io/badge/PyPI-toolpatch-blue)](https://pypi.org/project/toolpatch/)
+
 **In plain terms:** local AI models sometimes *mumble* their tool commands —
 your coding agent asks the model to list your files, and instead of a clean,
 structured instruction the model splatters raw JSON into the chat. This
@@ -67,57 +73,106 @@ a rename candidate).
 
 ## Usage
 
-```bash
-uv run proxytool serve     # default: 127.0.0.1:8180 → http://127.0.0.1:8181
-```
-
 The `proxytool` command is a console script registered in the app package
-(`[project.scripts]` in `apps/proxytool/pyproject.toml`), so any install of the
-app — workspace `uv sync`, `pip install proxytool`, or
+(`[project.scripts]` in `apps/proxytool/pyproject.toml`), so any install of
+the app — workspace `uv sync`, `pip install proxytool`, or
 `uv tool install proxytool` — puts it on your PATH. Full CLI reference:
 [`apps/proxytool/README.md`](apps/proxytool/README.md).
 
-## Run it for real (llama / mlx_lm / llama-swap + opencode or pi)
+**What it is, one line:** `proxytool` is a FastAPI middleware + CLI that sits
+in front of standard OpenAI-compatible local model servers, rewrites handler
+aliases, repairs garbled tool calls in-flight via the `toolpatch` library,
+and aborts asking-loops via LoopGuard.
 
-The exact stack many people run: a GGUF or MLX model (or several, behind
-llama-swap) served locally, and `opencode` or `pi` as the coding agent.
-Three choices, oldest-first complexity:
+### Startup order
 
-**1. One model, one command** — proxytool starts *and* supervises the backend
-for you, then shuts it down cleanly when you Ctrl-C:
+For the common setups the pieces come up in *this* order:
+
+1. **LLM server(s)** (llama.cpp, mlx_lm, oMLX) — unless proxytool manages
+   them for you (scenario A below), they must be listening first
+2. **llama-swap** — if you want on-demand multi-model swaps, start it after
+   its backends
+3. **proxytool** — last server piece: it health-checks its upstream at
+   startup and holds traffic until the backend answers
+4. **Agent client** (opencode, pi, …) — only needs proxytool's endpoint URL
+
+### 1 · Start the LLM server themselves (scenario A: proxytool manages it)
+
+`proxytool serve` can start, health-check, watch and shut down the server:
 
 ```bash
-proxytool serve --backend gguf --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-proxytool serve --backend mlx --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+# flag + flags only (with paths pointing to GGUF or MLX)
+proxytool serve --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
+proxytool serve --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+
+# env instead of flags
+export LTP_BACKEND=gguf  LTP_MODEL="$MPATH/qwen…gguf"
+proxytool serve
+
+# config file (same keys, camel/snake: [managed.<name>] + [upstream])
+cp examples/proxytool/proxytool.toml ~/.config/proxytool/config.toml
+proxytool serve
 ```
 
-**2. llama-swap picks the model on demand** — llama-swap already spins
-backends up/down from its own YAML; put proxytool in front of it:
+`--backend gguf|mlx|omlx|fake` is only needed when the backend cannot be
+inferred — a `.gguf` path, an `mlx-community/…` id or an `omlx` path are
+inferred from `--model` automatically.
 
 ```bash
-proxytool serve --upstream-url http://127.0.0.1:8080 \
-  --model-map '{"qwen-gguf":"<real llama-swap model id>","qwen-mlx":"<real id>"}'
-```
-
-**3. Run it in the background** (daemon) instead of a foreground terminal:
-
-```bash
-proxytool start --backend gguf --model "$MPATH/qwen…gguf"  # returns once /health answers
+# daemon form: start/status/health/models/stop
+proxytool start --model "$MPATH/qwen…gguf"   # returns once /health answers
 proxytool status && proxytool health && proxytool models
-proxytool stop                                             # logs: /tmp/proxytool-serve-state.log
+proxytool stop
 ```
 
-Prefer zero flags on the day-to-day? A config file makes `proxytool start`
-bare: `cp examples/proxytool/proxytool.toml ~/.config/proxytool/config.toml`,
-then `proxytool start` / `proxytool stop` just work. Precedence is
-**flag > env > config file > default** — full schema and discovery order in
-[`apps/proxytool/README.md`](apps/proxytool/README.md#config-file). The file
-is strictly validated at load (`proxytool config print` shows exactly what
-resolved, and where every value came from).
+### 2 · Start llama-swap (scenario B: llama-swap owns the backends)
 
-Client wiring (opencode `examples/opencode-*.jsonc`, pi `examples/pi/models.json`) and the
-detailed recipes, env-var table and flags: [`apps/proxytool/README.md`](apps/proxytool/README.md).
-What the two pieces actually repair when a model leaks: [`packages/toolpatch/README.md`](packages/toolpatch/README.md).
+llama-swap decides which model to spin up from its own YAML — proxytool just
+stands in front of it and keeps the repair/aliasing per request:
+
+```bash
+llama-swap --config llama-swap/config.yml           # listens on :8080
+proxytool serve --upstream-url http://127.0.0.1:8080 \
+  --model-map '{"qwen-gguf":"<real llama-swap model id>"}'
+```
+
+Equivalent env: `LTP_UPSTREAM_URL=http://127.0.0.1:8080`,
+`LTP_MODEL_MAP='{…}'`. See `examples/llama-swap/config.yml` for a working
+upstream file.
+
+### 3 · Start the agent client
+
+```bash
+# opencode — point it at proxytool via one env var
+export OPENCODE_CONFIG=examples/opencode-gguf.jsonc   # or opencode-mlx.jsonc
+opencode
+
+# pi — copy the provider file once, then run
+mkdir -p ~/.pi/agent && cp examples/pi/models.json ~/.pi/agent/models.json
+pi --provider proxytool --model qwen-mlx -p "list the files in ."
+
+# smoke-test without any agent
+LMW_TRACE=1 uv run uvicorn proxytool.main:app --port 8180   # dev server
+```
+
+The configs point their baseURL at `http://127.0.0.1:8180/v1` (proxytool).
+Aliases are rewritten server-side; clients stay oblivious.
+
+### 4 · One middle layer, several backends (scenario C)
+
+When not using llama-swap but more than one model server, let proxytool
+route by model id and pick the fallback:
+
+```bash
+proxytool serve \
+  --upstream gguf=http://127.0.0.1:8181 --upstream-models gguf=qwen-gguf \
+  --upstream mlx=http://127.0.0.1:8281 --upstream-models mlx=qwen-mlx \
+  --default-backend mlx
+```
+
+Full env-var table, precedence rules, config schema and diagnostics:
+[`apps/proxytool/README.md`](apps/proxytool/README.md). What gets repaired
+when a model leaks: [`packages/toolpatch/README.md`](packages/toolpatch/README.md).
 
 ## Tests & checks
 
