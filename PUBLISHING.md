@@ -39,6 +39,7 @@ uv run pytest                      # full suite
 uv run ruff check .
 uv run pyright
 uv run nox -s test                 # full 3.10–3.14 matrix (same sessions as CI)
+uv run nox -s coverage             # branch coverage snapshot worth recording
 
 # 4. Build test (both members)
 (cd packages/toolpatch && uv build) && (cd apps/proxytool && uv build)

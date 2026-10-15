@@ -66,7 +66,7 @@ That is the whole loop for a completed reply. For streaming replies use
 When a model's chat template is missing or mismatched, some local servers
 emit the tool call as **text inside** `choices[*].message.content` instead
 of the structured `tool_calls` field. The library recognizes three leaked
-payload shapes (first hit wins):
+payload shapes (all merged into one result, in document order):
 
 1. **Hermes-style XML function tags** — an XML tag block wrapping a JSON
    payload, the form Qwen and several other open models emit when they leak.
@@ -84,12 +84,18 @@ Plus the supporting repairs:
   repaired tool calls, adjacent assistant turns).
 - **Streaming** — `StreamHealer` does the same work on SSE content deltas
   with bounded buffering (time-to-first-token is preserved). It is an
-  in-flight accumulator, not "buffer until the first complete match": prose
-  is released as soon as no leak-shape opener is in flight, with an 8-char
-  suffix window so an opener straddling two deltas is re-judged whole.
-  Reasoning-tag-wrapped leaks (`gpt-think … <tool_call>` mid-buffer) are held by
-  a mid-buffer opener check, not just tail rules — the Qwen2.5 mlx pattern
-  that motivated it.
+  in-flight accumulator, not "buffer until the first complete match": clean
+  prose is released as soon as no leak-shape opener is in flight, with a
+  10-char suffix window so an opener straddling two deltas is re-judged
+  whole. Reasoning-tag-wrapped leaks (`gpt-think … <tool_call>` mid-buffer) are held
+  by a mid-buffer opener check, not just tail rules — the Qwen2.5 mlx
+  pattern that motivated it. Once a leak resolves, the healer switches to
+  *collecting* mode and defers promotion to stream end (bounded by a
+  4×`max_buffer` cap), so rapid-succession or parallel blocks — mixed
+  families included — all land in **one** `tool_calls` frame instead of
+  promoting the first call and suppressing the rest. Whitespace between two
+  leaked calls survives as real inter-call prose; only padding outside the
+  leak envelope is stripped.
 
 ## API
 
@@ -101,18 +107,28 @@ from toolpatch import extract_tool_calls, heal_json, StreamHealer, normalize_cha
 from toolpatch import ExtractedToolCalls  # dataclass: content, tool_calls, source
 ```
 
-### `extract_tool_calls(content, tool_names=None) -> ExtractedToolCalls | None`
+### `extract_tool_calls(content, tool_names=None,
+                        allow_unterminated_hermes=False)`
 
-Runs the three detectors over a completed assistant message. Returns `None`
-for clean prose (passthrough); on a hit returns the cleaned content and
-structured tool calls. Pass `tool_names={...}` to only accept calls whose
-`name` is in the set (anything else is left as prose).
+`-> ExtractedToolCalls | None`
+
+Runs all three detectors over the text and merges every distinct call into
+one result, in document order; overlapping/nested matches dedupe to the
+outer family. Returns `None` for clean prose (passthrough); on a hit
+returns the cleaned content plus the structured tool calls. Pass
+`tool_names={...}` to only accept calls whose `name` is in the set
+(anything else stays prose). `allow_unterminated_hermes=True` is the
+streaming path's opt-in: it tolerates one still-forming Hermes block at the
+end of the text.
+
+`ExtractedToolCalls.source` names the matching family (`hermes` / `fenced`
+/ `raw_json`) or `mixed` when families differ across the calls.
 
 ```python
-ex = extract_tool_calls('Checking. ')
-ex.tool_calls   # [{'id': 'call_…', 'type': 'function',
-                #   'function': {'name': 'list_dir', 'arguments': '{"path": "."}'}}]
-ex.content      # 'Checking.'
+ex = extract_tool_calls('Sure. ' + hermes_block)
+ex.content                                  # 'Sure.' (leak text removed)
+ex.source                                  # 'hermes'
+ex.tool_calls[0]['function']['name']        # 'list_dir'
 ```
 
 ### `heal_json(text) -> str | None`
@@ -126,11 +142,16 @@ literal. Returns the repaired JSON string, or `None` when unrecoverable.
 Streaming variant, for SSE content deltas. Feed it partial text as it
 arrives; it buffers only while a tool-call leak might be forming (bounded by
 `max_buffer`) and yields plain-dict events. Boundary safety is built in:
-fragments are re-judged over the whole buffer each delta (`max(7, 9)−1 = 8`
-trailing chars are held back, so a leak opener split across two deltas is
-seen whole once the next delta completes it), and on extraction the leak
-text is *removed* from the leftover content and later deltas are suppressed
-— the raw leak is never forwarded, so clients can't render duplicate text.
+fragments are re-judged over the whole buffer each delta, with the last
+`max(11, 8)−1 = 10` trailing chars held back (the 11-char `<tool_call>` opener
+vs the 8-char `{"name"` probe, minus one), so a leak opener split across
+two deltas is seen whole once the next delta completes it. A release slice
+ containing a leak shape is re-held instead of emitted — the raw leak text
+is never forwarded, so clients can't render duplicate content. After the
+first call resolves, promotion defers to stream end (4×`max_buffer` cap so
+an endless trailing ramble still promotes): all subsequent calls land in
+the one frame; residual prose between them comes out in the same batch,
+before the `tool_calls` event.
 
 ```python
 healer = StreamHealer()
@@ -141,7 +162,8 @@ for delta in sse_content_deltas:
             case "content":
                 pass  # safe to forward to the client as-is
             case "tool_calls":
-                ...   # event["stop"] is True — end of turn
+                ...   # event["stop"] is True — one frame per turn;
+                      # contains ALL calls seen (file, webfetch, …)
 
 for event in healer.finish():   # flush at stream end
     ...
