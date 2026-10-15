@@ -57,7 +57,7 @@ executing the tool. proxytool repairs it in-flight:
 
 **Status:** v1.0.0 — GGUF (llama-server) and MLX (mlx_lm.server) both
 round-trip verified end-to-end in live agent sessions. Ships a `proxytool`
-CLI with managed-process supervision and multi-backend routing.
+multi-backend routing over already-running OpenAI-compatible servers.
 
 > This app imports all repair logic from the sibling library
 > [`packages/toolpatch`](../../packages/toolpatch/README.md). Workspace
@@ -111,7 +111,7 @@ Eight subcommands:
 
 | Subcommand | Purpose |
 |---|---|
-| `serve` | run the middleware in the foreground (+ managed backends) |
+| `serve` | run the middleware in the foreground |
 | `start` | daemonize `serve` (same flags; detached; waits for /health) |
 | `stop` | gracefully stop a `start`ed server (SIGTERM → grace → SIGKILL) |
 | `status` | running / stopped / stale, from the state file |
@@ -134,10 +134,6 @@ server. Lifecycle state lives in `$LTP_STATE_PATH` or
 | `--upstream-models NAME=m1,m2` (repeatable) | `LTP_UPSTREAM_<NAME>_MODELS` | — | model ids routed to that backend |
 | `--default-backend NAME` | `LTP_DEFAULT_BACKEND` | first registered | backend used when no model list matches |
 | `--upstream-url URL` | `LTP_UPSTREAM_URL` / `LMW_UPSTREAM_URL` | `http://127.0.0.1:8181` | standalone single-backend URL |
-| `--managed 'NAME=http://host:port::CMD'` (repeatable) | `LTP_PROCESS_<NAME>_HEALTH_PATH` / `_STARTUP_TIMEOUT` / `_SHUTDOWN_TIMEOUT` | — | child process to supervise |
-| `--backend gguf\|mlx\|omlx\|fake` | `LTP_BACKEND` / `LMW_BACKEND` | inferred | request-sanitizer mode + managed-process template. Optional when `--model` pins it down: `*.gguf` → gguf, `*omlx*`/`*mlx*` (incl. `mlx-community/…`) → mlx/omlx; anything else needs it explicitly |
-| `--model PATH_OR_HF_ID` | — | — | model artifact for the managed template |
-| `--no-managed` | — | false | never spawn children (external upstream only) |
 | `--model-map JSON` / `--model-map-file PATH` | `LMW_MODEL_MAP` / `LMW_MODEL_MAP_FILE` | — | client alias → real model id |
 | `--upstream-api-key TOK` | `LMW_UPSTREAM_API_KEY` | — | static bearer token upstream |
 | `--upstream-timeout S` | `LMW_UPSTREAM_TIMEOUT` | `300` | upstream read timeout (covers cold starts) |
@@ -160,14 +156,10 @@ Legacy `LMW_*` env spellings keep working everywhere;
 # A. Standalone single backend (most common):
 proxytool serve --upstream-url http://127.0.0.1:8181
 
-# B. Managed child: proxytool starts llama-server, health-checks it, and
-#    shuts it down cleanly when you Ctrl-C. shell-quoted model paths OK.
-#    `--backend` is inferred from the artifact (*.gguf → gguf, mlx → mlx):
-proxytool serve --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-proxytool serve --backend mlx --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit   # explicit is always allowed
+# B. Multi-backend routing table (see below)
 
-# C. Explicit managed spec (full control; repeatable):
-proxytool serve --managed 'gguf=http://127.0.0.1:8181::llama-server --host 127.0.0.1 --port 8181 --ctx-size 16384 --jinja --model "$MPATH/qwen.gguf"'
+# Note: proxytool fronts servers that are ALREADY running. For automatic
+# start/stop of model servers use llama-swap (or compose/systemd).
 ```
 
 ### Multi-backend routing
@@ -198,17 +190,9 @@ proxytool serve
 ```
 
 All legacy `LMW_*` env vars keep working; `LTP_*` takes precedence when both
-are set.
-
-### Managed-process details
-
-Each `--managed` child is supervised: started before Uvicorn binds,
-poll-probed at `<base-url>/health` (override with
-`LTP_PROCESS_<NAME>_HEALTH_PATH`, e.g. `/v1/models` for mlx_lm.server),
-bound to a startup timeout (`LTP_PROCESS_<NAME>_STARTUP_TIMEOUT`, default
-120 s), and SIGTERM'd (then SIGKILL'd after a grace window) when the CLI
-exits. If the port is already occupied, proxytool assumes an existing
-instance and reuses it instead of failing.
+are set. `LMW_BACKEND` (`gguf | mlx | omlx | fake`) remains a *repair* tuning
+knob: it tells the request sanitizer which server dialect the upstream speaks
+(llama-server templates vs mlx_lm server). proxytool never launches the server.
 
 ### Test routing yourself
 
@@ -296,16 +280,15 @@ pi --provider proxytool --model qwen-mlx -p "list the files in ."   # one-shot t
 proxytool health && proxytool models                  # sanity check
 ```
 
-**4. Without llama-swap**, steps 1–2 collapse into one managed command —
-proxytool starts, health-checks and supervises the backend itself (`--jinja
-and ctx-size already included in the built-in gguf template):
+**4. Without llama-swap**, start the server yourself (llama-server / mlx_lm)
+and point proxytool at it — proxytool fronts whatever is already listening:
 
 ```bash
-proxytool serve --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"   # backend inferred (.gguf)
-proxytool serve --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit      # backend inferred (mlx)
+llama-server --host 127.0.0.1 --port 8181 --jinja --model "$MPATH/qwen.gguf" &
+proxytool serve --upstream-url http://127.0.0.1:8181
 ```
 
-Steps 3 onwards are identical in both variants.
+Steps 3 onwards are identical in all variants.
 
 ## opencode configs
 
@@ -412,15 +395,14 @@ Discovery (first hit wins): `--config PATH` → `$LTP_CONFIG` →
 `$XDG_CONFIG_HOME/proxytool/config.toml` → `~/.config/proxytool/config.toml`.
 Sections: `host`/`port`/`log_level`/`default_backend` (top-level), `[upstream]`
 (single backend URL), `[routing.<name>]` (multi-backend table; `default = true`
-on exactly one entry, or top-level `default_backend`), `[managed.<name>]`
-(child process to supervise), `[model_map]`, `[loopguard]`, `[trace]`.
+on exactly one entry, or top-level `default_backend`), `[model_map]`,
+`[loopguard]`, `[trace]`.
 See the annotated `examples/proxytool/proxytool.toml` for the full schema.
 
 Precedence per key — **CLI flag > env var > config file > built-in default**.
 The bridge only fills env vars (`LTP_*`) that neither a flag nor the
 environment expressed, so flags/env stay authoritative for overrides and
-scripting; a `[managed.*]` section is ignored when `--managed`/`--backend` is
-passed. Parse errors fail fast: `proxytool: config error: <file>: <detail>`.
+scripting. Parse errors fail fast: `proxytool: config error: <file>: <detail>`.
 
 Run it from another directory with an explicit file:
 
@@ -442,9 +424,7 @@ proxytool: config error: proxytool.toml:
 ```
 
 Parsed errors (invalid TOML syntax) fail the same way. `routing.<name>`
-entries need a `url`; `[managed.*]` entries need a `command` plus a
-`base_url` or `port`; `[upstream].url` must be a real `http(s)://` URL;
-`backend` must be one of `gguf | mlx | omlx | fake`.
+entries need a `url`; `[upstream].url` must be a real `http(s)://` URL.
 
 #### Diagnose without starting anything
 

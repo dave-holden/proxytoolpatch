@@ -23,8 +23,6 @@ Schema (all keys optional)::
 
     [upstream]                    # single-backend setup (llama-swap etc.)
     url = "http://127.0.0.1:8080"
-    backend = "gguf"              # gguf | mlx | omlx | fake (sanitizer + template)
-    model = "/models/qwen.gguf"   # artifact when proxytool launches the backend
     timeout = 600
     api_key = "sk-..."
 
@@ -32,13 +30,6 @@ Schema (all keys optional)::
     url = "http://127.0.0.1:8181"
     models = ["qwen-gguf", "qwen"]
     default = true
-
-    [managed.gguf]                # child process to supervise
-    command = "llama-server --port 8181 --model /models/qwen.gguf --jinja"
-    base_url = "http://127.0.0.1:8181"   # or port = 8181
-    health_path = "/health"
-    startup_timeout = 120
-    shutdown_timeout = 30
 
     [model_map]
     "qwen-gguf" = "qwen2.5-coder-14b-instruct"
@@ -126,8 +117,6 @@ class _CfgModel(BaseModel):
 
 class _Upstream(_CfgModel):
     url: AnyHttpUrl | None = None
-    backend: Literal["gguf", "mlx", "omlx", "fake"] | None = None
-    model: str | None = None
     timeout: float | None = Field(default=None, gt=0)
     api_key: str | None = None
     model_map_file: str | None = None
@@ -147,22 +136,6 @@ def _int_not_bool(v: Any) -> Any:
     return v
 
 
-class _Managed(_CfgModel):
-    # command/base_url/port presence is enforced with friendlier messages in
-    # validate_config (the bridge has the same guards as a second line).
-    command: str | None = None
-    port: int | None = Field(default=None, ge=1, le=65535)
-    base_url: AnyHttpUrl | None = None
-    health_path: str | None = None
-    startup_timeout: float | None = Field(default=None, gt=0)
-    shutdown_timeout: float | None = Field(default=None, gt=0)
-
-    @field_validator("port", mode="before")
-    @classmethod
-    def _mport_not_bool(cls, v: Any) -> Any:
-        return _int_not_bool(v)
-
-
 class _Loopguard(_CfgModel):
     nudge: int | None = Field(default=None, ge=0)
     abort: int | None = Field(default=None, ge=0)
@@ -180,7 +153,6 @@ class _Config(_CfgModel):
     default_backend: str | None = None
     upstream: _Upstream | None = None
     routing: dict[str, _Routing] | None = None
-    managed: dict[str, _Managed] | None = None
     model_map: dict[str, str] | None = None
     loopguard: _Loopguard | None = None
     trace: _Trace | None = None
@@ -195,7 +167,6 @@ _TOP_KEYS = tuple(_Config.model_fields)
 _SECTION_FIELDS = {
     "upstream": tuple(_Upstream.model_fields),
     "routing": tuple(_Routing.model_fields),
-    "managed": tuple(_Managed.model_fields),
     "loopguard": tuple(_Loopguard.model_fields),
     "trace": tuple(_Trace.model_fields),
 }
@@ -250,20 +221,6 @@ def validate_config(data: dict[str, Any], label: str = "config") -> None:
                 errors.append(
                     "default = true on more than one routing entry: "
                     + ", ".join(defaults))
-
-    managed = data.get("managed")
-    if managed is not None:
-        if not isinstance(managed, dict):
-            errors.append("[managed] must be a table of [managed.<name>] entries")
-        else:
-            for name, t in managed.items():
-                if not isinstance(t, dict):
-                    errors.append(f"managed.{name} must be a table")
-                elif not t.get("command"):
-                    errors.append(f"managed.{name} needs at least a command")
-                elif not (t.get("base_url") or t.get("port")):
-                    errors.append(
-                        f"managed.{name}: set base_url or port for the health check")
 
     try:
         _Config.model_validate(data)
@@ -367,7 +324,6 @@ def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None
             "LTP_UPSTREAM_URL", str(up["url"]).rstrip("/")):
         applied.append("LTP_UPSTREAM_URL")
     for attr, key, envk in (
-        ("backend", "backend", "LTP_BACKEND"),
         ("upstream_api_key", "api_key", "LTP_UPSTREAM_API_KEY"),
         ("upstream_timeout", "timeout", "LTP_UPSTREAM_TIMEOUT"),
     ):
@@ -404,68 +360,23 @@ def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None
         applied.append("LMW_TRACE_FILE")
 
 
-def _bridge_managed(cfg: dict[str, Any], args: Any,
-                    applied: list[str]) -> list[str]:
-    """[managed.<name>] → spec strings + LTP_PROCESS_<NAME>_* env.
-
-    Skipped when the CLI already names children via --managed/--backend.
-    Returns dev-spec strings for ``parse_managed_specs``.
-    """
-    managed = cfg.get("managed") or {}
-    if not managed or list(getattr(args, "managed", None) or []) or _flag(
-            "backend", args):
-        return []
-    specs: list[str] = []
-    for name, t in managed.items():
-        if not isinstance(t, dict) or not t.get("command"):
-            raise ValueError(f"managed.{name} needs at least a command")
-        base = str(t.get("base_url") or "").rstrip("/") or (
-            f"http://127.0.0.1:{int(t['port'])}" if t.get("port") else "")
-        if not base:
-            raise ValueError(
-                f"managed.{name}: set base_url or port for the health check")
-        specs.append(f"{name}={base}::{t['command']}")
-        upper = str(name).upper().replace("-", "_")
-        for _key, envk, val in (
-            ("base_url", "BASE_URL", base),
-            ("port", "PORT", str(int(t["port"])) if t.get("port") else None),
-            ("health_path", "HEALTH_PATH",
-             str(t["health_path"]) if t.get("health_path") else None),
-            ("startup_timeout", "STARTUP_TIMEOUT",
-             str(float(t["startup_timeout"])) if t.get("startup_timeout") else None),
-            ("shutdown_timeout", "SHUTDOWN_TIMEOUT",
-             str(float(t["shutdown_timeout"])) if t.get("shutdown_timeout") else None),
-        ):
-            if val and not _env_set(f"LTP_PROCESS_{upper}_{envk}"):
-                os.environ[f"LTP_PROCESS_{upper}_{envk}"] = val
-                applied.append(f"LTP_PROCESS_{upper}_{envk}")
-        applied.append(f"managed.{name}")
-    return specs
-
-
 def apply_config(args: Any, *, serve: bool,
                  routing: bool = False) -> tuple[Path | None, dict[str, Any],
                                                  dict[str, Any]]:
     """Bridge the resolved config into env.
 
-    Returns ``(path, cfg, info)`` where ``info`` carries ``applied`` (env keys
-    set), ``managed_specs`` (serve only), and the "backend"/"model" values
-    from ``[upstream]`` for the managed template.
+    Returns ``(path, cfg, info)`` where ``info`` carries ``applied``
+    (env keys set by the bridge).
     """
     path = find_config(getattr(args, "config", None) if args is not None else None)
     cfg = load_config(path)
-    info: dict[str, Any] = {"applied": [], "managed_specs": []}
+    info: dict[str, Any] = {"applied": []}
     if not cfg:
         return path, cfg, info
     applied: list[str] = info["applied"]
     _bridge_settings(cfg, args, applied)
-    up = cfg.get("upstream") or {}
-    info["backend"] = up.get("backend")
-    info["model"] = up.get("model")
     if routing:
         _bridge_routing(cfg, args, applied)
-    if serve and not getattr(args, "no_managed", False):
-        info["managed_specs"] = _bridge_managed(cfg, args, applied)
     return path, cfg, info
 
 
@@ -481,7 +392,6 @@ _SEARCH_DETAIL = {
     "LTP_PORT": "port",
     "LTP_LOG_LEVEL": "log_level",
     "LTP_UPSTREAM_URL": "upstream.url",
-    "LTP_BACKEND": "upstream.backend",
     "LTP_UPSTREAM_API_KEY": "upstream.api_key",
     "LTP_UPSTREAM_TIMEOUT": "upstream.timeout",
     "LTP_MODEL_MAP": "model_map",
@@ -490,8 +400,6 @@ _SEARCH_DETAIL = {
     "LTP_TRACE": "trace.enabled",
     "LMW_TRACE_FILE": "trace.file",
 }
-_PROCESS_KEYS = ("BASE_URL", "PORT", "HEALTH_PATH", "STARTUP_TIMEOUT",
-                 "SHUTDOWN_TIMEOUT")
 
 
 def _search_candidates(explicit: str | None) -> list[Path]:
@@ -516,10 +424,6 @@ def _detail_for(key: str) -> str:
     m = re.fullmatch(r"LTP_UPSTREAM_([A-Z0-9_]+)", key)
     if m:
         return f"routing.{m.group(1).lower()}.url"
-    m = re.fullmatch(
-        r"LTP_PROCESS_([A-Z0-9_]+?)_(" + "|".join(_PROCESS_KEYS) + r")", key)
-    if m:
-        return f"managed.{m.group(1).lower()}.{m.group(2).lower()}"
     return ""
 
 

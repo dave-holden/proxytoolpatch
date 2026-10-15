@@ -82,7 +82,8 @@ The app (*proxytool*) is not published; it runs from a workspace checkout.
 ## Daemon-style CLI (serve / start / stop / status / health / models)
 
 ```bash
-proxytool start --backend fake      # detached serve; waits for /health
+proxytool start                     # detached serve; waits for /health
+                                    # (fronts your already-running upstream)
 proxytool status                    # running / stopped / stale
 proxytool health                    # JSON: middleware + each backend
 proxytool models                    # JSON: each upstream's /v1/models

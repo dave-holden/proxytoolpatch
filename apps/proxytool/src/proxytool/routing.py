@@ -1,4 +1,4 @@
-"""Backend routing table: which managed upstream does a request hit.
+"""Backend routing table: which upstream does a request hit.
 
 Backends can be declared on the CLI via repeatable ``--upstream NAME=URL``
 flags or through ``LTP_UPSTREAM_<NAME>`` / ``LTP_UPSTREAM_DEFAULT`` env vars

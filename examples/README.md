@@ -6,7 +6,7 @@ it belongs and what to edit.
 
 | File | What | Where it goes |
 |---|---|---|
-| [`proxytool/proxytool.toml`](proxytool/proxytool.toml) | The middleware's own config: server bind, upstream, managed backends, model map, LoopGuard, tracing | `~/.config/proxytool/config.toml` or `./proxytool.toml` next to where you run it |
+| [`proxytool/proxytool.toml`](proxytool/proxytool.toml) | The middleware's own config: server bind, upstream, routing, model map, LoopGuard, tracing | `~/.config/proxytool/config.toml` or `./proxytool.toml` next to where you run it |
 | [`opencode-gguf.jsonc`](opencode-gguf.jsonc) | opencode client wired to `proxytool/qwen-gguf` (llama-server upstream) | `OPENCODE_CONFIG=./examples/opencode-gguf.jsonc` |
 | [`opencode-mlx.jsonc`](opencode-mlx.jsonc) | opencode client wired to `proxytool/qwen-mlx` (mlx_lm.server upstream) | `OPENCODE_CONFIG=./examples/opencode-mlx.jsonc` |
 | [`pi/models.json`](pi/models.json) | pi client provider + two model aliases through the proxy | `~/.pi/agent/models.json` (or `PI_MODELS_FILE`) |
@@ -30,17 +30,18 @@ running:
 proxytool serve --upstream-url http://127.0.0.1:8181
 ```
 
-or let proxytool own the process (spawn + health-check + clean shutdown, see
-the `[managed.gguf]` block in [`proxytool/proxytool.toml`](proxytool/proxytool.toml)):
+or run the server yourself in this same terminal before proxytool (the
+relevant llama-server flags live upstream, not in proxytool):
 
 ```bash
-proxytool serve --backend gguf \
-  --model /models/qwen2.5-coder-14b-instruct-q4_k_m.gguf
+llama-server --host 127.0.0.1 --port 8181 --jinja \
+  --model /models/qwen2.5-coder-14b-instruct-q4_k_m.gguf &
+proxytool serve --upstream-url http://127.0.0.1:8181
 ```
 
-**mlx_lm.server**: same two options as above (`--upstream-url` or
-`--model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit` — the `mlx` backend
-kind is inferred from the id).
+**mlx_lm.server**: start it the same way (`python -m mlx_lm.server --model
+mlx-community/Qwen2.5-Coder-14B-Instruct-4bit --port 8181`), then point
+proxytool's `--upstream-url` at it.
 
 **Client aliases** (`qwen-gguf`, `qwen-mlx`) are meaningless to the upstream —
 they must map to real model ids via `--model-map` or the `[model_map]` section

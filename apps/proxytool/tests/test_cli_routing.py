@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from proxytool.routing import Backend, BackendRouter, backends_from_args, backends_from_env
-from proxytool.supervisor import ManagedProcess, default_specs_for, parse_managed_specs
 
 
 class TestBackendRouter:
@@ -89,43 +88,3 @@ class TestBackendsFromArgs:
     def test_malformed_upstream_flag_raises(self) -> None:
         with pytest.raises(ValueError, match="NAME=URL"):
             backends_from_args(["nonsense"], {}, None)
-
-
-class TestManagedSpecs:
-    def test_parse_managed_specs_basic(self) -> None:
-        procs = parse_managed_specs(
-            ["gguf=http://127.0.0.1:8181::llama-server --port 8181"], "gguf"
-        )
-        assert len(procs) == 1
-        p = procs[0]
-        assert p.name == "gguf"
-        assert p.port == 8181
-        assert p.base_url == "http://127.0.0.1:8181"
-        assert p.command == "llama-server --port 8181"
-        assert p.url_for("/health") == "http://127.0.0.1:8181/health"
-
-    def test_parse_managed_specs_env_overrides(self, monkeypatch) -> None:
-        monkeypatch.setenv("LTP_PROCESS_GGUF_STARTUP_TIMEOUT", "15")
-        monkeypatch.setenv("LTP_PROCESS_GGUF_HEALTH_PATH", "/v1/models")
-        procs = parse_managed_specs(
-            ["gguf=http://127.0.0.1:8181::true"], "gguf"
-        )
-        assert procs[0].startup_timeout == 15.0
-        assert procs[0].health_path == "/v1/models"
-
-    def test_parse_managed_specs_rejects_bad_spec(self) -> None:
-        with pytest.raises(ValueError, match="NAME=http"):
-            parse_managed_specs(["no-url-here"], "gguf")
-
-    def test_default_specs_gguf_quotes_model(self) -> None:
-        specs = default_specs_for("gguf", "/path/with space/model.gguf")
-        assert len(specs) == 1
-        assert "llama-server" in specs[0]
-        assert "'/path/with space/model.gguf'" in specs[0]
-
-    def test_default_specs_empty_without_model(self) -> None:
-        assert default_specs_for("gguf", None) == []
-
-    def test_url_for_unknown_spec_port(self) -> None:
-        p = ManagedProcess(name="x", command="true", port=9999)
-        assert p.url_for("health").endswith(":9999/health")

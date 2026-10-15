@@ -43,11 +43,11 @@ def _write_toml(tmp_path, text: str):
 def _args(**kw: Any):
     base: dict[str, Any] = {
         "config": None, "host": None, "port": None, "quiet": False,
-        "log_level": None, "upstream_url": None, "backend": None,
-        "model": None, "upstream_api_key": None, "upstream_timeout": None,
+        "log_level": None, "upstream_url": None,
+        "upstream_api_key": None, "upstream_timeout": None,
         "model_map": None, "model_map_file": None, "trace": False,
         "loop_nudge": None, "loop_abort": None, "default_backend": None,
-        "upstream": [], "upstream_models": [], "managed": [], "no_managed": False,
+        "upstream": [], "upstream_models": [],
     }
     base.update(kw)
     return type("A", (), base)()
@@ -108,7 +108,6 @@ class TestBridgeSettings:
             'log_level = "debug"\n'
             "[upstream]\n"
             'url = "http://127.0.0.1:8080/"\n'
-            'backend = "mlx"\n'
             "timeout = 600\n"
             'api_key = "sk-t"\n'
             "[model_map]\n"
@@ -123,7 +122,6 @@ class TestBridgeSettings:
         assert os.environ["LTP_PORT"] == "9999"
         assert os.environ["LTP_LOG_LEVEL"] == "debug"
         assert os.environ["LTP_UPSTREAM_URL"] == "http://127.0.0.1:8080"
-        assert os.environ["LTP_BACKEND"] == "mlx"
         assert os.environ["LTP_UPSTREAM_TIMEOUT"] == "600"
         assert os.environ["LTP_UPSTREAM_API_KEY"] == "sk-t"
         assert json.loads(os.environ["LTP_MODEL_MAP"]) == {"a": "b"}
@@ -150,9 +148,9 @@ class TestBridgeSettings:
     def test_legacy_lmw_env_also_blocks_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("LMW_BACKEND", "gguf")
-        _write_toml(tmp_path, '[upstream]\nbackend = "mlx"')
+        _write_toml(tmp_path, "host = \"127.0.0.1\"")  # harmless config file
         _apply_toml_config(_args(), serve=True)
-        assert os.environ["LMW_BACKEND"] == "gguf"
+        assert os.environ["LMW_BACKEND"] == "gguf"  # env untouched by the file
 
     def test_quiet_flag_blocks_config_log_level(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -219,36 +217,6 @@ class TestBridgeRouting:
             apply_config(_args(), serve=True, routing=True)
 
 
-class TestBridgeManaged:
-    def test_managed_specs_converted(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        _write_toml(tmp_path, (
-            "[managed.gguf]\n"
-            'command = "llama-server --port 8181"\n'
-            "port = 8181\n"
-            'health_path = "/v1/models"\n'
-            "startup_timeout = 15\n"
-        ))
-        _path, _c, info = _apply_toml_config(_args(), serve=True)
-        assert info["managed_specs"] == \
-            ["gguf=http://127.0.0.1:8181::llama-server --port 8181"]
-        assert os.environ["LTP_PROCESS_GGUF_HEALTH_PATH"] == "/v1/models"
-        assert os.environ["LTP_PROCESS_GGUF_STARTUP_TIMEOUT"] == "15.0"
-
-    def test_managed_skipped_when_cli_manages(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        _write_toml(tmp_path, "[managed.gguf]\ncommand = 'true'\nport = 9999")
-        _path, _c, info = _apply_toml_config(_args(managed=["x=http://y:1::true"]),
-                                             serve=True)
-        assert info["managed_specs"] == []
-
-    def test_managed_requires_health_target(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        _write_toml(tmp_path, "[managed.gguf]\ncommand = 'true'")
-        with pytest.raises(ValueError, match="base_url or port"):
-            apply_config(_args(), serve=True)
-
-
 class TestTrace:
     def test_trace_bridged(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -271,8 +239,7 @@ class TestCmdServingPieces:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "nothing"))
         path, cfg, info = apply_config(_args(), serve=True)
-        assert path is None and cfg == {} and info == {"applied": [],
-                                                       "managed_specs": []}
+        assert path is None and cfg == {} and info == {"applied": []}
 
     def test_apply_env_and_config_coexist(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -316,9 +283,6 @@ class TestValidateConfig:
     def test_port_rejects_bool(self, tmp_path):
         self._expect_error(tmp_path, "port = true", "port")
 
-    def test_unknown_backend_choice(self, tmp_path):
-        self._expect_error(tmp_path, '[upstream]\nbackend = "ggff"', "backend")
-
     def test_bad_url_rejected(self, tmp_path):
         self._expect_error(tmp_path, '[upstream]\nurl = "not-a-url"', "valid URL")
 
@@ -344,7 +308,7 @@ class TestDescribeConfig:
     def test_found_and_config_sourced(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-        _write_toml(tmp_path, "port = 9999\n[upstream]\nbackend = 'mlx'")
+        _write_toml(tmp_path, "port = 9999\n[trace]\nenabled = true")
         info = describe_config(_args())
         assert info["valid"]
         assert info["file"] == str(tmp_path / "proxytool.toml")
@@ -352,7 +316,6 @@ class TestDescribeConfig:
         assert rows["LTP_PORT"]["source"] == "config file"
         assert rows["LTP_PORT"]["value"] == "9999"
         assert rows["LTP_PORT"]["detail"] == "port"
-        assert rows["LTP_BACKEND"]["detail"] == "upstream.backend"
         assert "LTP_PORT" in info["applied"]
 
     def test_env_pre_existing_beats_config(self, tmp_path, monkeypatch):
