@@ -4,6 +4,10 @@
 
 # proxytool (the app)
 
+[![test & checks](https://github.com/dave-holden/proxytoolpatch/actions/workflows/test.yml/badge.svg)](https://github.com/dave-holden/proxytoolpatch/actions/workflows/test.yml)
+[![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)](https://www.python.org)
+[![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 **In plain terms:** you run one thing — `proxytool serve` — and it takes care
 of the rest: it can start your local model server(s) for you (llama-server,
 mlx_lm.server), watches them, routes each request to the right model, and fixes
@@ -297,8 +301,8 @@ proxytool starts, health-checks and supervises the backend itself (`--jinja
 and ctx-size already included in the built-in gguf template):
 
 ```bash
-proxytool serve --backend gguf --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-proxytool serve --backend mlx --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+proxytool serve --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"   # backend inferred (.gguf)
+proxytool serve --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit      # backend inferred (mlx)
 ```
 
 Steps 3 onwards are identical in both variants.
