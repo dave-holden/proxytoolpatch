@@ -21,22 +21,41 @@ Running.md
 
 **/*.log
 
+.claude/
+.cursor/
+.aider/
+.codex/
+.continue/
+.freebuff
+
 history.txt
 
 config/*
-!config/opencode.jsonc
-!config/opencode-gguf.jsonc
-!config/opencode-mlx.jsonc
-!config/pi-models.json
-!config/proxytool-example.toml
+# !config/opencode.jsonc
+# !config/opencode-gguf.jsonc
+# !config/opencode-mlx.jsonc
+# !config/pi-models.json
+# !config/proxytool-example.toml
 
 **/.DS_Store
 *.pyo
 *.pyc
 __pycache__
 
-main.py
-
 oc-stderr.log
 
+/assets
 scripts/
+strip-commit-footer.sh
+
+apps/proxytool/public/assets/images/proxytool-with-bg.webp
+
+packages/toolpatch/public/assets/images/toolpatch-with-bg.webp
+
+public/assets/images/proxytoolpatch-with-bg.webp
+public/assets/images/proxytoolpatch.png
+
+debug_hermes.py
+probe_extract.py
+probe_stream.py
+probe_test_const.py

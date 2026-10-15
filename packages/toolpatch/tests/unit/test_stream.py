@@ -98,6 +98,66 @@ def test_partial_object_then_completion_recover():
     assert not any(e["type"] == "content" and e.get("text") for e in events)
 
 
+# -- multi-call scenarios (review: mid-buffer interception with multi-tool)
+
+HERMES_B = '<tool_call>{"name": "webfetch", "arguments": {"url": "https://x.dev/"}}</tool_call>'
+
+
+def _tool_calls(events: list[dict]) -> list[dict]:
+    """All calls across a single promotion frame (there must be exactly one)."""
+    promotions = [e for e in events if e["type"] == "tool_calls"]
+    assert len(promotions) == 1, f"expected ONE promotion frame, got {len(promotions)}"
+    assert promotions[0].get("stop") is True
+    return promotions[0]["tool_calls"]
+
+
+def test_two_hermes_blocks_same_buffer_single_promotion():
+    """Prose + two leaked calls in one buffer → one frame, two tool_calls."""
+    text = f"Here goes. {HERMES}{HERMES_B}"
+    events = _feed_chunks(text, 4)
+    calls = _tool_calls(events)
+    assert [c["function"]["name"] for c in calls] == ["list_dir", "webfetch"]
+    joined = "".join(e.get("text", "") for e in events if e["type"] == "content")
+    assert "Here goes." in joined
+    assert "tool_call" not in joined
+
+
+def test_sequential_calls_rapid_succession_not_suppressed():
+    """Call #1 completes while call #2 hasn't started streaming: the healer
+    must NOT promote-and-lock early — call #2 must still be promoted."""
+    h = StreamHealer()
+    events = h.feed("checking… ")
+    events += h.feed(HERMES)        # call #1 complete, #2 not yet started
+    events += h.feed(" and ")       # inter-call gap
+    events += h.feed(HERMES_B)      # call #2 completes later
+    events += h.finish()
+    calls = _tool_calls(events)     # assert exactly one promotion frame
+    assert [c["function"]["name"] for c in calls] == ["list_dir", "webfetch"]
+    joined = "".join(e.get("text", "") for e in events if e["type"] == "content")
+    assert "checking…" in joined and " and " in joined
+
+
+def test_mixed_family_hermes_plus_fenced_both_promoted():
+    """Parallel blocks in different families both land in the one frame."""
+    fenced = "```json\n{\"name\": \"read_file\", \"arguments\": {\"f\": \"a.py\"}}\n```"
+    text = HERMES + fenced
+    events = _feed_chunks(text, 6)
+    calls = _tool_calls(events)
+    assert [c["function"]["name"] for c in calls] == ["list_dir", "read_file"]
+    assert "```" not in "".join(e.get("text", "") for e in events if e["type"] == "content")
+
+
+def test_collecting_mode_bounded_by_cap():
+    """A call followed by a rambling stream must still promote by the cap."""
+    filler = "word " * 400      # > 4 * default max_buffer (512*4 = 2048)
+    h = StreamHealer()
+    events = h.feed(HERMES + filler)
+    promotions = [e for e in events if e["type"] == "tool_calls"]
+    assert len(promotions) == 1           # cap forced one promotion
+    assert promotions[0]["tool_calls"][0]["function"]["name"] == "list_dir"
+    assert h.finish() == []  # _done: nothing further after the cap promotion
+
+
 def test_leading_brace_json_value_stream_released():
     """A leading '{' that opens a plain JSON *value* (not a tool call) stills
     releases content once the buffer passes max_buffer (not stuck forever)."""

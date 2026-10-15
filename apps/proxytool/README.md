@@ -42,6 +42,11 @@ executing the tool. proxytool repairs it in-flight:
   `finish_reason` chunk before `[DONE]`, so agent clients close the turn
   instead of re-prompting.
 
+- Frame-safe SSE ingestion: upstream HTTP chunks are reassembled into whole
+  SSE lines before decoding (`_SSEParser`), so a `data:` payload or a
+  multibyte UTF-8 character split across two chunks is neither dropped nor
+  corrupted into U+FFFD — covered by split-frame regression tests.
+
 - LoopGuard: detects consecutive byte-identical requests (same sanitized
   messages + tools), nudges the model, and aborts after a bounded number of
   repeats.
@@ -201,10 +206,6 @@ bound to a startup timeout (`LTP_PROCESS_<NAME>_STARTUP_TIMEOUT`, default
 exits. If the port is already occupied, proxytool assumes an existing
 instance and reuses it instead of failing.
 
-`scripts/dev-rig.sh` goes through the same CLI — see
-[`scripts/README.md`](../../scripts/README.md) for the one-command dev rig
-it adds on top.
-
 ### Test routing yourself
 
 ```bash
@@ -218,7 +219,7 @@ uv run pytest apps/proxytool/tests/test_routing_integration.py -q
 uv sync --all-packages          # one shared root .venv (workspace members editable)
 
 # Terminal 1: fake upstream (or your real llama-server / mlx server on 8181)
-uv run uvicorn scripts.fake_upstream:app --host 127.0.0.1 --port 8181
+uv run uvicorn fake_upstream:app --host 127.0.0.1 --port 8181
 
 # Terminal 2: the middleware
 LMW_TRACE=1 uv run uvicorn proxytool.main:app --host 127.0.0.1 --port 8180
@@ -285,7 +286,7 @@ proxytool serve --upstream-url http://127.0.0.1:8080 \
 directly:**
 
 ```bash
-export OPENCODE_CONFIG=./config/opencode-gguf.jsonc   # baseURL http://127.0.0.1:8180/v1
+export OPENCODE_CONFIG=./examples/opencode-gguf.jsonc   # baseURL http://127.0.0.1:8180/v1
 opencode                                              # interactive agent
 pi --provider proxytool --model qwen-mlx -p "list the files in ."   # one-shot turn
 proxytool health && proxytool models                  # sanity check
@@ -309,11 +310,11 @@ the repair path is engaged — see the `/v1` suffix note inside each file):
 
 | Config | Model id | Backend |
 |---|---|---|
-| `config/opencode-gguf.jsonc` | `proxytool/qwen-gguf` | llama-server (GGUF) |
-| `config/opencode-mlx.jsonc` | `proxytool/qwen-mlx` | mlx_lm.server (MLX) |
+| `examples/opencode-gguf.jsonc` | `proxytool/qwen-gguf` | llama-server (GGUF) |
+| `examples/opencode-mlx.jsonc` | `proxytool/qwen-mlx` | mlx_lm.server (MLX) |
 
 ```bash
-export OPENCODE_CONFIG=./config/opencode-gguf.jsonc   # or opencode-mlx.jsonc
+export OPENCODE_CONFIG=./examples/opencode-gguf.jsonc   # or opencode-mlx.jsonc
 opencode
 ```
 
@@ -324,7 +325,7 @@ opencode). Both point at the same middleware `/v1` endpoint — same repair
 path, same LoopGuard.
 
 1. Install: `curl -fsSL https://pi.dev/install.sh | sh` (Node 22.19+)
-2. Copy `config/pi-models.json` into `~/.pi/agent/models.json`
+2. Copy `examples/pi/models.json` into `~/.pi/agent/models.json`
 3. Run:
 
 ```bash
@@ -335,15 +336,8 @@ pi --list-models proxytool                      # verify the provider is visible
 
 Flags worth knowing: `/model` inside a session switches models without a
 restart (models.json is re-read every time). The `compat` flags in
-`config/pi-models.json` (`supportsDeveloperRole`, `supportsReasoningEffort`)
+`examples/pi/models.json` (`supportsDeveloperRole`, `supportsReasoningEffort`)
 keep pi's request dialect compatible with local inference servers.
-
-Quick smoke test (middleware health, raw tool round-trip, one-shot pi turn):
-
-```bash
-./scripts/pi-smoke.sh
-MW=http://127.0.0.1:8180 ./scripts/pi-smoke.sh   # explicit middleware URL
-```
 
 ## llama-swap / gateway upstreams
 
@@ -364,7 +358,9 @@ see the routing bullets below for alias-to-id mapping.)
   with (a local snapshot path beats a same-name HF repo id).
 - **Timeouts / no buffering** — `LMW_UPSTREAM_TIMEOUT` (default `300`s)
   covers llama-swap's on-demand model loads; SSE responses stream through
-  unbuffered (the healer emits as chunks arrive, preserving TTFT).
+  unbuffered (the healer emits as chunks arrive, preserving TTFT) — the
+  only accumulation is frame reassembly of chunk-boundary-split SSE lines
+  and content buffers while a leak might be forming.
 - **Header preservation** — client `Authorization` and routing headers are
   forwarded per-request; additionally, `LMW_UPSTREAM_API_KEY` sends a static
   bearer token upstream (for `llama-server --api-key` or gated gateways).
@@ -399,7 +395,7 @@ Drop a TOML file and run bare commands — the llama-swap experience:
 
 ```bash
 # one-time
-cp config/proxytool-example.toml ~/.config/proxytool/config.toml   # or ./proxytool.toml
+cp examples/proxytool/proxytool.toml ~/.config/proxytool/config.toml   # or ./proxytool.toml
 
 # day to day — no flags, no env:
 proxytool start          # or: proxytool serve
@@ -414,7 +410,7 @@ Sections: `host`/`port`/`log_level`/`default_backend` (top-level), `[upstream]`
 (single backend URL), `[routing.<name>]` (multi-backend table; `default = true`
 on exactly one entry, or top-level `default_backend`), `[managed.<name>]`
 (child process to supervise), `[model_map]`, `[loopguard]`, `[trace]`.
-See the annotated `config/proxytool-example.toml` for the full schema.
+See the annotated `examples/proxytool/proxytool.toml` for the full schema.
 
 Precedence per key — **CLI flag > env var > config file > built-in default**.
 The bridge only fills env vars (`LTP_*`) that neither a flag nor the
@@ -500,11 +496,8 @@ tool_calls, stream and non-stream), and prints a capture block ready to paste
 into the regression-fixture dir if the model produces a novel misformatting:
 
 ```bash
-# with the dev-rig running a real model (see scripts/README.md):
+# with the middleware serving a real model (see the quickstart above):
 LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_qwen.py -q
-
-# or one-shot: rig up, test, tear down:
-./scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf uv-test
 ```
 
 Env: `LMW_LIVE=1` to enable, `LMW_MIDDLEWARE_URL` (default
@@ -549,11 +542,10 @@ Also auto-skips when `pi` is not on PATH. Extra env: `LMW_PI_BIN` (defaults
 to `pi`), `LMW_LIVE_MODEL_PI` (defaults to `qwen-mlx`).
 
 ```bash
-# End-to-end one-shots: dev-rig with real model + middleware + all live suites:
-./scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf uv-test              # qwen suite
+# End-to-end one-shots with a real model behind the middleware on 8180:
+LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_qwen.py -q         # qwen suite
 LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_opencode.py -q   # + opencode
 LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q         # + pi
-./scripts/pi-smoke.sh                                                 # quick pi smoke
 ```
 
 PyCharm Run/Debug (watch payloads transit, breakpoints, fake-upstream

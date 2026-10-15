@@ -2,9 +2,10 @@
 
 ## PRs & branch protection (why they aren't "on" yet)
 
-This repo currently has **no git remote** — branch protection and PR checks
-are GitHub-side settings that need a hosted repo to attach to. Everything on
-the CI/hook side is already prepared:
+The hosted repo (`github.com/dave-holden/proxytoolpatch` — remote `origin`
+already added) does **not yet have branch protection / PR checks enabled** —
+those are GitHub-side settings. Everything on the CI/hook side is already
+prepared:
 
 1. Create the GitHub repo and add the remote:
    ```bash
@@ -25,26 +26,24 @@ the CI/hook side is already prepared:
 
 ## Local quality gates (active now, remote or not)
 
+A local, untracked `scripts/` directory (git hooks, dev rig, the fake
+upstream) may exist on your machine if you created the quality-gate hook
+before it was retired from tracking — it is per-developer tooling, not part
+of either published module. Everything below works from a **fresh clone**:
+
 ```bash
-./scripts/install-hooks.sh     # wire pre-commit/pre-push gates into git
+uv run nox -s lint        # ruff
+uv run pytest             # full local test suite
+FULL_MATRIX=1 git push    # run the whole 3.10–3.14 matrix in the pre-push gate (if wired)
 ```
 
-- **pre-push** (and lighter **pre-commit**) run `ruff` + full local pytest.
-- Full 3.10–3.14 matrix on demand: `FULL_MATRIX=1 git push` or
-  `./scripts/test-matrix.sh` any time.
+- **pre-push/pre-commit hooks** (optional): a `scripts/pre-push-gate.sh`
+  wired via `git config core.hooksPath scripts/hooks` run `ruff` + pytest;
+  with no custom `core.hooksPath` git skips them.
 - Bypass in a genuine emergency: `git push --no-verify` (the CI gate will
   still report the truth after the push).
 
 ## Test matrix
-
-```bash
-./scripts/test-matrix.sh                  # all Python versions 3.10–3.14
-./scripts/test-matrix.sh 3.11 3.12        # subset
-./scripts/test-matrix.sh --module toolpatch  # one module's tests only
-./scripts/pyright-matrix.sh               # type-check on the 3.10 floor
-```
-
-Same matrix via Nox (`uv run nox` from the repo root — `noxfile.py`):
 
 ```bash
 uv run nox -s lint                        # ruff only
@@ -87,7 +86,7 @@ proxytool serve --upstream-url http://127.0.0.1:8181   # foreground (as before)
 All daemon flags have a TOML config-file equivalent
 (`~/.config/proxytool/config.toml` or `./proxytool.toml` — see the app
 README's [Config file](apps/proxytool/README.md#config-file) section and the
-annotated `config/proxytool-example.toml`). With the file in place the CLI
+annotated `examples/proxytool/proxytool.toml`). With the file in place the CLI
 stays minimal — `proxytool start` / `proxytool stop` — while flags/env keep
 winning per-key (flag > env > file > default).
 
