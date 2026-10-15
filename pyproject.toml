@@ -16,6 +16,9 @@ dev = [
     "pytest>=9.0",
     "pytest-asyncio>=1.0",
     "respx>=0.23",
+    # starlette>=1.7 TestClient prefers httpx2; without it it falls back to
+    # the legacy httpx and emits a StarletteDeprecationWarning on every run.
+    "httpx2>=2.13",
     "ruff>=0.14",
     "pyright>=1.1.407",
     "nox>=2024.10",
