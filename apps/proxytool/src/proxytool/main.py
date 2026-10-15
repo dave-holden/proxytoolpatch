@@ -366,6 +366,14 @@ async def _streaming(request: Request, payload: dict[str, Any],
         usage: dict[str, Any] | None = None
         upstream_finish: str | None = None
         terminated = False  # a finish_reason has been forwarded downstream
+        first_role: str | None = None  # upstream role delta, forwarded once
+
+        def _ev_json(ev: dict[str, Any],
+                     finish_reason: str | None = None,
+                     usage_: dict[str, Any] | None = None) -> bytes:
+            nonlocal first_role
+            r, first_role = first_role, None
+            return _event_json(ev, meta, finish_reason, usage_, role=r)
         try:
             async for chunk in upstream.aiter_bytes():
                 for kind, data in sse.feed(chunk):
@@ -387,26 +395,28 @@ async def _streaming(request: Request, payload: dict[str, Any],
                     if choice.get("finish_reason"):
                         upstream_finish = choice["finish_reason"]
                     delta = choice.get("delta") or {}
+                    if first_role is None and delta.get("role"):
+                        first_role = delta["role"]
                     text = delta.get("content")
                     if not text:
                         continue
                     for ev in healer.feed(text):
                         if ev["type"] == "tool_calls" and ev.get("stop"):
-                            yield _event_json(ev, meta, "tool_calls", usage)
+                            yield _ev_json(ev, "tool_calls", usage)
                             terminated = True
                         else:
-                            yield _event_json(ev, meta)
+                            yield _ev_json(ev)
             for ev in healer.finish():
                 if ev["type"] == "tool_calls" and ev.get("stop"):
-                    yield _event_json(ev, meta, "tool_calls", usage)
+                    yield _ev_json(ev, "tool_calls", usage)
                     terminated = True
                 else:
-                    yield _event_json(ev, meta)
+                    yield _ev_json(ev)
             if not terminated:
                 # Repaired/replayed streams still need OpenAI-protocol
                 # termination: without a finish_reason chunk, opencode treats
                 # every response as an unterminated turn and re-prompts.
-                yield _event_json({"type": "control"}, meta, upstream_finish or "stop", usage)
+                yield _ev_json({"type": "control"}, upstream_finish or "stop", usage)
             yield b"data: [DONE]\n\n"
         finally:
             await upstream.aclose()
@@ -421,6 +431,7 @@ def _event_json(
     meta: dict[str, Any],
     finish_reason: str | None = None,
     usage: dict[str, Any] | None = None,
+    role: str | None = None,
 ) -> bytes:
     """Render one StreamHealer event as an OpenAI-compatible SSE chunk."""
     if ev["type"] == "tool_calls":
@@ -429,6 +440,10 @@ def _event_json(
         delta = {"content": ev.get("text", "")}
     else:
         delta = {}
+    # OpenAI streams start with a role-bearing first delta; clients use it to
+    # initialize the assistant message, so the first emitted chunk carries it.
+    if role is not None:
+        delta = {"role": role, **delta}
     out: dict[str, Any] = {
         **meta,
         "choices": [
