@@ -84,45 +84,34 @@ in front of standard OpenAI-compatible local model servers, rewrites handler
 aliases, repairs garbled tool calls in-flight via the `toolpatch` library,
 and aborts asking-loops via LoopGuard.
 
+**Scope, stated clearly:** proxytool only looks after itself. It fronts
+model servers that are *already running*; owning their process lifecycle is
+deliberately out of scope — that's the job of llama-swap (multi-model start /
+stop from YAML), or your compose/systemd unit.
+
 ### Startup order
 
 For the common setups the pieces come up in *this* order:
 
-1. **LLM server(s)** (llama.cpp, mlx_lm, oMLX) — unless proxytool manages
-   them for you (scenario A below), they must be listening first
+1. **LLM server(s)** (llama.cpp, mlx_lm, oMLX) — must be listening first
 2. **llama-swap** — if you want on-demand multi-model swaps, start it after
    its backends
 3. **proxytool** — last server piece: it health-checks its upstream at
    startup and holds traffic until the backend answers
 4. **Agent client** (opencode, pi, …) — only needs proxytool's endpoint URL
 
-### 1 · Start the LLM server themselves (scenario A: proxytool manages it)
-
-`proxytool serve` can start, health-check, watch and shut down the server:
+### 1 · Start the LLM server yourself
 
 ```bash
-# flag + flags only (with paths pointing to GGUF or MLX)
-proxytool serve --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-proxytool serve --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+# llama.cpp with the qwen tool-call template
+llama-server --host 127.0.0.1 --port 8181 --jinja \
+  --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf" &
 
-# env instead of flags
-export LTP_BACKEND=gguf  LTP_MODEL="$MPATH/qwen…gguf"
-proxytool serve
+# or mlx_lm.server
+python -m mlx_lm.server --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit --port 8181
 
-# config file (same keys, camel/snake: [managed.<name>] + [upstream])
-cp examples/proxytool/proxytool.toml ~/.config/proxytool/config.toml
-proxytool serve
-```
-
-`--backend gguf|mlx|omlx|fake` is only needed when the backend cannot be
-inferred — a `.gguf` path, an `mlx-community/…` id or an `omlx` path are
-inferred from `--model` automatically.
-
-```bash
-# daemon form: start/status/health/models/stop
-proxytool start --model "$MPATH/qwen…gguf"   # returns once /health answers
-proxytool status && proxytool health && proxytool models
-proxytool stop
+# optional: tell the repair layer which server dialect it is talking to
+export LMW_BACKEND=gguf   # gguf | mlx | omlx | fake  (repair hint only)
 ```
 
 ### 2 · Start llama-swap (scenario B: llama-swap owns the backends)
@@ -139,6 +128,18 @@ proxytool serve --upstream-url http://127.0.0.1:8080 \
 Equivalent env: `LTP_UPSTREAM_URL=http://127.0.0.1:8080`,
 `LTP_MODEL_MAP='{…}'`. See `examples/llama-swap/config.yml` for a working
 upstream file.
+
+Then start proxytool itself — foreground, or daemonized with its own
+lifecycle commands (this self-management is what proxytool *does* own):
+
+```bash
+proxytool serve --upstream-url http://127.0.0.1:8080      # foreground
+
+# or the daemon form: returns once its /health answers
+proxytool start --upstream-url http://127.0.0.1:8080
+proxytool status && proxytool health && proxytool models
+proxytool stop
+```
 
 ### 3 · Start the agent client
 

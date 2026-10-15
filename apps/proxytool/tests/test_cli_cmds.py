@@ -276,7 +276,7 @@ def test_cmd_serve_runs_uvicorn_once(state_env, monkeypatch):
         calls.append((a, kw))
 
     monkeypatch.setattr("uvicorn.run", fake_uvicorn_run)
-    args = _parse(["serve", "--port", "8971", "--no-managed",
+    args = _parse(["serve", "--port", "8971",
                    "--upstream-url", "http://127.0.0.1:8288"])
     assert cli.cmd_serve(args) == 0
     assert len(calls) == 1
@@ -284,30 +284,6 @@ def test_cmd_serve_runs_uvicorn_once(state_env, monkeypatch):
     assert a[0] == "proxytool.main:app"
     assert kw["port"] == 8971
     assert os.environ["LMW_UPSTREAM_URL"] == "http://127.0.0.1:8288"
-
-
-def test_cmd_serve_model_backend_inference_failure(state_env, capsys):
-    args = _parse(["serve", "--model", "some-plain-hf-name", "--no-managed"])
-    assert cli.cmd_serve(args) == 2
-    assert "cannot infer" in capsys.readouterr().err
-
-
-def test_cmd_serve_infers_backend_from_model(state_env, monkeypatch):
-    monkeypatch.setenv("LMW_UPSTREAM_URL", "")
-    monkeypatch.setenv("LTP_UPSTREAM_URL", "")
-    calls: list[tuple[tuple, dict]] = []
-    monkeypatch.setattr("uvicorn.run", lambda *a, **kw: calls.append((a, kw)))
-    args = _parse(["serve", "--model", "model.gguf", "--no-managed"])
-    assert cli.cmd_serve(args) == 0
-    assert calls
-
-
-# ---------------------------------------------------------------- helpers
-def test_infer_backend_matrix():
-    assert cli._infer_backend("model.gguf") == "gguf"
-    assert cli._infer_backend("OMLX-thing") == "omlx"
-    assert cli._infer_backend("mlx-community/x") == "mlx"
-    assert cli._infer_backend("plain") is None
 
 
 def test_flag_or_env(monkeypatch):
@@ -323,12 +299,12 @@ def test_merge_env_into_process_env(monkeypatch):
     import proxytool.routing as routing
 
     args = types.SimpleNamespace(
-        backend="fake", upstream_api_key="sk", upstream_timeout=7.5,
+        upstream_api_key="sk", upstream_timeout=7.5,
         model_map=None, model_map_file=None, trace=True,
         loop_nudge=3, loop_abort=9, upstream_url=None,
     )
     # Pre-set every key the helper writes directly: teardown restores them.
-    for var in ("LMW_BACKEND", "LMW_UPSTREAM_API_KEY", "LMW_UPSTREAM_TIMEOUT",
+    for var in ("LMW_UPSTREAM_API_KEY", "LMW_UPSTREAM_TIMEOUT",
                 "LMW_MODEL_MAP", "LMW_MODEL_MAP_FILE", "LMW_TRACE",
                 "LMW_LOOP_NUDGE", "LMW_LOOP_ABORT", "LTP_DEFAULT_BACKEND"):
         monkeypatch.setenv(var, "")
@@ -337,7 +313,6 @@ def test_merge_env_into_process_env(monkeypatch):
     monkeypatch.delenv("LMW_LOOP_NUDGE", raising=False)
     monkeypatch.delenv("LMW_LOOP_ABORT", raising=False)
     cli._merge_env_into_process_env(args, backends)
-    assert os.environ["LMW_BACKEND"] == "fake"
     assert os.environ["LMW_UPSTREAM_API_KEY"] == "sk"
     assert os.environ["LMW_TRACE"] == "1"
     assert os.environ["LMW_LOOP_NUDGE"] == "3"

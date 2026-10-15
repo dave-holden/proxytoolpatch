@@ -14,7 +14,7 @@ def configure_logging(*, level: str | None = None, quiet: bool = False) -> None:
     ``quiet`` suppresses non-error app output to stderr by raising the app
     logger threshold to ``error``.
 
-    This sets up a simple stderr handler so app-level log lines (supervisor
+    This sets up a simple stderr handler so app-level log lines (server
     lifecycle, loop-guard notes, toolpatch-internal debug) are emitted
     consistently. Uvicorn/FastAPI server logging is still configured
     separately by the CLI via ``uvicorn.run(log_level=...)``.

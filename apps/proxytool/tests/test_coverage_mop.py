@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import logging
-import subprocess
-import types
 import urllib.request
-from typing import cast
 
 import pytest
 from test_cli_cmds import _FakeChild, _FakeResp, _parse
 
 import proxytool.cli as cli
 import proxytool.config as config
-import proxytool.supervisor as sup
-from proxytool.supervisor import ManagedProcess
 from proxytool.trace import _NoopLogger
 
 
@@ -55,7 +49,6 @@ def test_detail_for_map():
         "LTP_LOOP_ABORT", "")
     assert config._detail_for("LTP_UPSTREAM_MLX_MODELS") == "routing.mlx.models"
     assert config._detail_for("LTP_UPSTREAM_MLX") == "routing.mlx.url"
-    assert config._detail_for("LTP_PROCESS_GGUF_PORT") == "managed.gguf.port"
     assert config._detail_for("SOME_RANDOM_KEY") == ""
 
 
@@ -75,62 +68,6 @@ def test_noop_logger_methods():
     assert noop.info("x") is None
     assert noop.warning("x") is None
     assert noop.error("x") is None
-
-
-# --------------------------------------------------------------- supervisor
-def test_can_emit_branches():
-    assert sup._can_emit(None) is False
-    plain = types.SimpleNamespace(debug=lambda *a: None)  # no .handle
-    assert sup._can_emit(plain) is False
-    assert sup._can_emit(logging.getLogger("sup-mop")) is True  # via attribute
-
-
-def test_supervisor_start_logs_with_real_logger(monkeypatch):
-    monkeypatch.setattr(sup, "_probe", lambda url, timeout: True)
-    logger = logging.getLogger("sup-mop-log")
-    logger.setLevel(logging.INFO)
-    if not logger.handlers:
-        logger.addHandler(logging.NullHandler())
-    monkeypatch.setattr(sup, "_log", SupMopLogger(logger))
-    sup_obj = sup.Supervisor([])
-    proc = ManagedProcess(name="logged", command="true", port=49_995,
-                          startup_timeout=3)
-    sup_obj.start(proc)
-    assert "logged" in sup_obj._children
-
-
-class SupMopLogger(logging.Logger):
-    def __init__(self, inner):
-        super().__init__("sup-mop-logger")
-        self.inner = inner
-
-    def info(self, *a, **k):
-        self.inner.info(*a, **k)
-
-
-def test_shutdown_sigkill_after_grace(monkeypatch):
-    class Stubborn:
-        def __init__(self):
-            self.killed = False
-        def send_signal(self, sig):
-            pass
-        def wait(self, timeout=None):
-            if self.killed:
-                return 0
-            raise subprocess.TimeoutExpired(cmd="x", timeout=0.1)
-        def kill(self):
-            self.killed = True
-
-    ticks = iter([100.0, 109.99, 109.99])
-    monkeypatch.setattr(sup.time, "monotonic", lambda: next(ticks, 110.0))
-    sup_obj = sup.Supervisor([])
-    child = Stubborn()
-    sup_obj._children["stubborn"] = cast(subprocess.Popen, child)
-    logger = logging.getLogger("sup-mop-sigkill")
-    logger.setLevel(logging.WARNING)
-    monkeypatch.setattr(sup, "_log", SupMopLogger(logger))
-    sup_obj.shutdown()
-    assert child.killed
 
 
 # --------------------------------------------------------------- cli.py
@@ -168,21 +105,19 @@ def test_cmd_start_argv_carries_all_flags(state_env, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda *a, **k: _FakeResp(200))
     args = _parse([
-        "start", "--backend", "fake", "--model", "acme.gguf",
+        "start",
         "--upstream-url", "http://127.0.0.1:9998",
         "--model-map", '{"a": "b"}', "--upstream-api-key", "sk-x",
         "--upstream-timeout", "5", "--default-backend", "fake",
         "--upstream", "gguf=http://127.0.0.1:9998",
-        "--upstream-models", "gguf=qwen-gguf", "--managed",
-        "gguf=http://127.0.0.1:9998::true", "--trace", "--no-managed",
+        "--upstream-models", "gguf=qwen-gguf", "--trace",
         "--loop-nudge", "2", "--loop-abort", "4", "--log-level", "debug",
     ])
     assert cli.cmd_start(args) == 0
     argv = captured["argv"]
-    for expected in ("--backend", "fake", "--model", "acme.gguf",
-                     "--upstream-url", "--model-map", "--upstream-api-key",
+    for expected in ("--upstream-url", "--model-map", "--upstream-api-key",
                      "--upstream-timeout", "5", "--default-backend",
-                     "--no-managed", "--trace", "--loop-nudge", "2",
+                     "--trace", "--loop-nudge", "2",
                      "--loop-abort", "4", "--log-level", "debug"):
         assert expected in argv
     assert "--quiet" not in argv
@@ -195,6 +130,6 @@ def test_cmd_start_arg_quiet_flag(state_env, monkeypatch):
                                             _FakeChild())[1])
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda *a, **k: _FakeResp(200))
-    args = _parse(["start", "--quiet", "--no-managed"])
+    args = _parse(["start", "--quiet"])
     assert cli.cmd_start(args) == 0
     assert "--quiet" in captured["argv"]

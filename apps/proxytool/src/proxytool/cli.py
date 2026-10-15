@@ -1,18 +1,16 @@
 """``proxytool`` CLI — a thin launcher around the FastAPI app.
 
-It does NOT replace Uvicorn: it builds a uvicorn ``Config``/``Server`` in-process,
-optionally starts managed child processes (llama-server, mlx_lm.server, ...)
-first, health-checks them, and routes requests to the selected backend. Every
-setting can come from either a CLI flag or an env var (``LTP_*``, formerly
-``LMW_*`` — both are read, ``LTP_`` wins).
+It does NOT replace Uvicorn: it builds a uvicorn ``Config``/``Server``
+in-process. Every setting can come from either a CLI flag or an env var
+(``LTP_*``, formerly ``LMW_*`` — both are read, ``LTP_`` wins).
+
+proxytool only looks after itself: it fronts an *existing* OpenAI-compatible
+upstream. Managing model servers' process lifecycle is out of scope here —
+use llama-swap, compose, or whatever launcher you already have.
 
 Usage::
 
-    # managed gguf backend (starts llama-server for you)
-    proxytool serve --upstream gguf \
-        --managed 'gguf=http://127.0.0.1:8181::llama-server --port 8181 --model $MODEL'
-
-    # external backend already running (no child processes)
+    # external backend already running (llama-swap / your own launcher)
     proxytool serve --upstream-url http://127.0.0.1:8181
 
     # two backends routed by model id
@@ -38,7 +36,6 @@ import uvicorn
 
 from proxytool.config import apply_config, config_help_line, describe_config
 from proxytool.routing import Backend, backends_from_args, backends_from_env
-from proxytool.supervisor import ManagedProcess, Supervisor, default_specs_for, parse_managed_specs
 
 
 def _apply_toml_config(args: Any, *, serve: bool, routing: bool = False
@@ -73,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    s = sub.add_parser("serve", help="run the middleware (+ managed backends)")
+    s = sub.add_parser("serve", help="run the middleware in the foreground")
     s.add_argument("--host", default=None, help="bind host (LTP_HOST, default 127.0.0.1)")
     s.add_argument("--port", type=int, default=None, help="bind port (LTP_PORT, default 8180)")
 
@@ -94,26 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument(
         "--upstream-url", default=None,
         help="standalone single-backend URL (LMW_UPSTREAM_URL/LTP_UPSTREAM_URL)",
-    )
-
-    # Managed children.
-    s.add_argument(
-        "--managed", action="append", default=[], metavar="NAME=URL::CMD",
-        help="child process spec, repeatable, e.g. "
-             "--managed 'gguf=http://127.0.0.1:8181::llama-server --port 8181 ...'",
-    )
-    s.add_argument(
-        "--backend", choices=("gguf", "mlx", "omlx", "fake"), default=None,
-        help="default managed-process template + request sanitizer mode "
-             "(LMW_BACKEND/LTP_BACKEND)",
-    )
-    s.add_argument(
-        "--model", default=None,
-        help="model artifact for the default managed template (gguf/mlx/omlx)",
-    )
-    s.add_argument(
-        "--no-managed", action="store_true",
-        help="do not start any child processes even if --managed/--backend imply some",
     )
 
     # Request-side knobs forwarded to Settings.
@@ -190,8 +167,6 @@ def build_parser() -> argparse.ArgumentParser:
 def _merge_env_into_process_env(args: Any,
                                 backends: dict[str, Backend]) -> None:
     """Ensure settings_* env vars are visible to a reloaded ProxySettings."""
-    if args.backend and not os.environ.get("LMW_BACKEND"):
-        os.environ["LMW_BACKEND"] = args.backend
     if args.upstream_api_key and not os.environ.get("LMW_UPSTREAM_API_KEY"):
         os.environ["LMW_UPSTREAM_API_KEY"] = args.upstream_api_key
     if args.upstream_timeout and not os.environ.get("LMW_UPSTREAM_TIMEOUT"):
@@ -244,22 +219,6 @@ def cmd_serve(args: Any) -> int:
             default=len(backends) == 0,
         ))
 
-    # 2. Managed children (from --managed specs, config [managed.*], else
-    #    backend templates). `--backend` is optional when `--model` is given:
-    #    the backend kind is inferred from the artifact (see _infer_backend).
-    specs = list(args.managed or []) or list(cfg_info.get("managed_specs") or [])
-    eff_backend = args.backend or cfg_info.get("backend")
-    eff_model = args.model or cfg_info.get("model")
-    if eff_model and not eff_backend:
-        eff_backend = _infer_backend(str(eff_model))
-        if eff_backend is None:
-            print(f"proxytool: cannot infer the backend from --model {eff_model!r} "
-                  "— pass --backend gguf|mlx|omlx|fake explicitly", file=sys.stderr)
-            return 2
-    if not specs and eff_backend and not args.no_managed:
-        specs = default_specs_for(eff_backend, eff_model)
-    processes: list[ManagedProcess] = parse_managed_specs(specs, eff_backend or "gguf")
-
     # 3. Settings env bridge (flags → env → Settings defaults).
     _merge_env_into_process_env(args, backends)
     # App-level logging is configured once here (CLI flags / env). It is
@@ -292,16 +251,13 @@ def cmd_serve(args: Any) -> int:
     print(f"[proxytool] middleware on {args.host or '127.0.0.1'}:{args.port or 8180}"
           f" → upstream {resolved_url}", file=sys.stderr, flush=True)
 
-    # 4. Run children + uvicorn in the same event loop / signal context.
-    supervisor = Supervisor(processes)
-    with supervisor.run():
-        # Thin launcher: we still hand off to Uvicorn, never replace it.
-        uvicorn.run(
-            "proxytool.main:app",
-            host=args.host or os.environ.get("LTP_HOST", "127.0.0.1"),
-            port=args.port if args.port is not None else int(os.environ.get("LTP_PORT", "8180")),
-            log_level=os.environ.get("LTP_LOG_LEVEL", "info"),
-        )  # blocking; SIGINT/SIGTERM propagate into the with-block exit
+    # 4. Run uvicorn in-process; SIGINT/SIGTERM propagate normally.
+    uvicorn.run(
+        "proxytool.main:app",
+        host=args.host or os.environ.get("LTP_HOST", "127.0.0.1"),
+        port=args.port if args.port is not None else int(os.environ.get("LTP_PORT", "8180")),
+        log_level=os.environ.get("LTP_LOG_LEVEL", "info"),
+    )  # blocking
     return 0
 
 
@@ -337,23 +293,6 @@ def cmd_config(args: Any) -> int:
     return 0
 
 
-def _infer_backend(model: str) -> str | None:
-    """Deduce the backend kind from a model artifact, or None when unclear.
-
-    Confident cases only: GGUF snapshots, omlx/mlx paths, mlx-community HF
-    repo ids. Anything else (plain HF ids, bare names) stays ambiguous —
-    mlX vs omlx servers differ there — and the CLI asks for --backend.
-    """
-    m = str(model).lower()
-    if m.endswith(".gguf"):
-        return "gguf"
-    if "omlx" in m:  # before the mlx check — "omlx" contains "mlx"
-        return "omlx"
-    if "mlx" in m:  # covers mlx-community/…, -mlx names, mlx directories
-        return "mlx"
-    return None
-
-
 def cmd_version(_args: Any) -> int:
     from importlib.metadata import PackageNotFoundError, version
 
@@ -368,8 +307,6 @@ def cmd_version(_args: Any) -> int:
 # Kept explicit instead of introspecting serve's parser — the "recursive
 # mirror" trick ran build_parser() unconditionally, which recursed forever.
 _SERVE_FLAGS: tuple[tuple[str, str, str], ...] = (
-    ("backend", "--backend", "backend kind (gguf|mlx|omlx|fake)"),
-    ("model", "--model", "model artifact for the managed template"),
     ("upstream_url", "--upstream-url", "standalone single-backend URL"),
     ("model_map", "--model-map", "inline JSON alias map"),
     ("model_map_file", "--model-map-file", "JSON alias-map file"),
@@ -387,10 +324,6 @@ def _mirror_serve_args(parser: argparse.ArgumentParser) -> None:
                         metavar="NAME=URL", help="register a backend, repeatable")
     parser.add_argument("--upstream-models", action="append", default=[],
                         metavar="NAME=m1,m2", help="model ids routed to a backend")
-    parser.add_argument("--managed", action="append", default=[],
-                        metavar="NAME=URL::CMD", help="child process spec, repeatable")
-    parser.add_argument("--no-managed", action="store_true",
-                        help="do not start any child processes")
     parser.add_argument("--trace", action="store_true", help="payload trace on")
     parser.add_argument("--loop-nudge", type=int, default=None, help="loop nudge threshold")
     parser.add_argument("--loop-abort", type=int, default=None, help="loop abort threshold")
@@ -489,7 +422,7 @@ def cmd_start(args: Any) -> int:
         return 1
     # Rebuild the exact serve invocation from the parsed flags.
     argv = [sys.executable, "-m", "proxytool", "serve", "--host", host, "--port", str(port)]
-    for name in ("backend", "model", "upstream_url", "model_map", "model_map_file",
+    for name in ("upstream_url", "model_map", "model_map_file",
                  "upstream_api_key", "upstream_timeout"):
         v = getattr(args, name, None)
         if v:
@@ -500,10 +433,6 @@ def cmd_start(args: Any) -> int:
         argv += ["--upstream-models", spec]
     if args.default_backend:
         argv += ["--default-backend", args.default_backend]
-    for spec in (args.managed or []):
-        argv += ["--managed", spec]
-    if args.no_managed:
-        argv.append("--no-managed")
     if args.trace:
         argv.append("--trace")
     if args.loop_nudge is not None:

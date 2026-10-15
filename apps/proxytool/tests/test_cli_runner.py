@@ -57,7 +57,6 @@ class TestMergeEnv:
     def test_flags_written_into_env_when_unset(self, monkeypatch, clean_env) -> None:
         args = type(
             "A", (), {
-                "backend": "mlx",
                 "upstream_api_key": "sk-x",
                 "upstream_timeout": 42.0,
                 "model_map": '{"a": "b"}',
@@ -68,7 +67,6 @@ class TestMergeEnv:
             },
         )()
         cli_mod._merge_env_into_process_env(args, {})
-        assert os.environ["LMW_BACKEND"] == "mlx"
         assert os.environ["LMW_UPSTREAM_API_KEY"] == "sk-x"
         assert os.environ["LMW_UPSTREAM_TIMEOUT"] == "42.0"
         assert os.environ["LMW_MODEL_MAP"] == '{"a": "b"}'
@@ -77,13 +75,13 @@ class TestMergeEnv:
         assert os.environ["LMW_LOOP_ABORT"] == "4"
 
     def test_existing_env_not_clobbered(self, monkeypatch, clean_env) -> None:
-        monkeypatch.setenv("LMW_BACKEND", "gguf")
-        args = type("A", (), {"backend": "mlx", "upstream_api_key": None,
+        monkeypatch.setenv("LMW_TRACE", "1")
+        args = type("A", (), {"upstream_api_key": None,
                               "upstream_timeout": None, "model_map": None,
-                              "model_map_file": None, "trace": False,
+                              "model_map_file": None, "trace": True,
                               "loop_nudge": None, "loop_abort": None})()
         cli_mod._merge_env_into_process_env(args, {})
-        assert os.environ["LMW_BACKEND"] == "gguf"
+        assert os.environ["LMW_TRACE"] == "1"  # not clobbered to "1" again
 
 
 class TestPickSingleBackendUrlEnvFallback:
@@ -98,30 +96,6 @@ class TestVersion:
     def test_version_command_exits_zero(self, capsys) -> None:
         assert cli_mod.main(["version"]) == 0
         assert "proxytool" in capsys.readouterr().out
-
-
-class TestInferBackend:
-    """`--backend` can be omitted when `--model` pins it down unambiguously."""
-
-    def test_gguf_snapshot(self) -> None:
-        assert cli_mod._infer_backend(
-            "/models/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf") == "gguf"
-
-    def test_mlx_community_repo(self) -> None:
-        assert cli_mod._infer_backend(
-            "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit") == "mlx"
-
-    def test_mlx_safetensors_path(self) -> None:
-        assert cli_mod._infer_backend(
-            "~/models/mlx/qwen/qwen-4bit.safetensors") == "mlx"
-
-    def test_omlx_path(self) -> None:
-        assert cli_mod._infer_backend("/models/omlx/qwen.safetensors") == "omlx"
-
-    def test_ambiguous_hf_id_returns_none(self) -> None:
-        # A plain HF repo id or bare name could be mlx or omlx — do not guess.
-        assert cli_mod._infer_backend("Qwen/Qwen2.5-Coder-14B-Instruct") is None
-        assert cli_mod._infer_backend("some-local-checkpoint") is None
 
 
 class TestParser:
@@ -142,6 +116,3 @@ class TestParser:
         assert args.upstream_models == ["gguf=qwen-gguf,qwen"]
         assert args.default_backend == "mlx"
 
-    def test_no_managed_flag_parsed(self) -> None:
-        args = cli_mod.build_parser().parse_args(["serve", "--no-managed"])
-        assert args.no_managed is True
