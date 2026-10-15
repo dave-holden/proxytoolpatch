@@ -235,3 +235,102 @@ def test_stream_plain_answer_not_mangled(client, mock_upstream):
     )
     assert content == "Hello there!"
     assert '"tool_calls"' not in res.text
+
+
+def _split_response(*chunks: bytes):
+    """Upstream fake whose ``aiter_bytes`` yields arbitrary byte chunks."""
+
+    class _SplitResp:
+        status_code = 200
+
+        def __init__(self) -> None:
+            self.headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            for c in chunks:
+                yield c
+
+        async def aclose(self):
+            pass
+
+        async def aread(self):
+            return b""
+
+    return _SplitResp()
+
+
+def test_stream_frame_split_mid_json(client, monkeypatch):
+    """An SSE data line split mid-JSON across HTTP chunks must reassemble."""
+    import proxytool.main as main_mod
+
+    body_text = json.dumps(
+        {"choices": [{"delta": {"content": "plain"}}]},
+        separators=(",", ":"),
+    )
+    sse = f"data: {body_text}\n\ndata: [DONE]\n\n".encode()
+    # Slice inside the JSON payload, after a brace: the first chunk is an
+    # unparseable half-line by itself.
+    cut = sse.index(b"delta") + len(b"de")
+    half1, half2 = sse[:cut], sse[cut:]
+    assert b"\n" not in half1 and not half2.startswith(b"data")
+
+    async def fake_forward_stream(path, payload, headers=None):
+        return _split_response(half1, half2)
+
+    monkeypatch.setattr(main_mod.conduit, "forward_stream", fake_forward_stream)
+    res = client.post(
+        "/v1/chat/completions",
+        json={"model": "qwen", "stream": True,
+              "messages": [{"role": "user", "content": "hi"}], "tools": [TOOL]},
+    )
+    assert res.status_code == 200
+    content = "".join(
+        json.loads(line[6:])["choices"][0]["delta"].get("content", "")
+        for line in res.text.splitlines()
+        if line.startswith("data: ") and line != "data: [DONE]"
+    )
+    assert content == "plain"
+
+
+def test_stream_multibyte_char_split_across_chunks(client, monkeypatch):
+    """A multibyte UTF-8 char split across chunks must survive intact."""
+    import proxytool.main as main_mod
+
+    text = "héllo 地球"
+    # ensure_ascii=False: emit raw multi-byte UTF-8, as llama-server/mlx do
+    # (\u escapes would make byte-splitting unreachable).
+    payload = "data: " + json.dumps(
+        {"choices": [{"delta": {"content": text}}]},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ) + "\n\ndata: [DONE]\n\n"
+    raw = payload.encode("utf-8")
+    # Split exactly inside a multibyte character: locate 'é's 0xC3 lead byte
+    # and cut between it and its continuation byte.
+    first_nonascii = next(i for i, b in enumerate(raw) if b >= 0x80)
+    cut = first_nonascii + 1  # inside 'é' (0xC3 0xA9)
+    half1, half2 = raw[:cut], raw[cut:]
+    try:
+        half1.decode("utf-8")
+    except UnicodeDecodeError:
+        pass  # the cut landed mid-character, as required
+    else:
+        raise AssertionError("cut must land inside a multibyte char")
+
+    async def fake_forward_stream(path, payload, headers=None):
+        return _split_response(half1, half2)
+
+    monkeypatch.setattr(main_mod.conduit, "forward_stream", fake_forward_stream)
+    res = client.post(
+        "/v1/chat/completions",
+        json={"model": "qwen", "stream": True,
+              "messages": [{"role": "user", "content": "hi"}], "tools": [TOOL]},
+    )
+    assert res.status_code == 200
+    assert "\ufffd" not in res.text, "replacement char must not leak into content"
+    content = "".join(
+        json.loads(line[6:])["choices"][0]["delta"].get("content", "")
+        for line in res.text.splitlines()
+        if line.startswith("data: ") and line != "data: [DONE]"
+    )
+    assert content == text

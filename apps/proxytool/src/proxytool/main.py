@@ -117,26 +117,52 @@ def _request_tool_names(payload: dict[str, Any]) -> set[str] | None:
     return names or None
 
 
-def _sse_events(raw: bytes) -> list[tuple[str, dict[str, Any] | None]]:
-    """Parse an SSE byte chunk into (kind, data-or-None) tuples.
+class _SSEParser:
+    """Stateful SSE frame parser for chunked upstream streams.
 
-    kind is "data", "comment", "event", or "raw" (unparsed line).
+    HTTP chunks are *not* guaranteed to end on an SSE frame boundary: a
+    `data:` JSON payload can be split across two ``aiter_bytes()`` chunks,
+    and a multibyte UTF-8 character can be split mid-sequence. Bytes are
+    accumulated until a complete ``\n``-terminated line exists and only
+    whole lines are decoded, so both cases resolve before ``json.loads``
+    ever sees a payload (”data events carry the none-None frame dict).
     """
-    out: list[tuple[str, dict[str, Any] | None]] = []
-    text = raw.decode("utf-8", errors="replace")
-    for line in text.splitlines():
-        if line.startswith("data: "):
-            body = line[6:]
-            if body == "[DONE]":
-                out.append(("done", None))
-                continue
-            try:
-                out.append(("data", json.loads(body)))
-            except json.JSONDecodeError:
-                out.append(("raw", None))
-        elif line.strip():
-            out.append(("raw", None))
-    return out
+
+    def __init__(self) -> None:
+        self._buf = b""
+
+    def feed(self, chunk: bytes) -> list[tuple[str, dict[str, Any] | None]]:
+        out: list[tuple[str, dict[str, Any] | None]] = []
+        self._buf += chunk
+        while b"\n" in self._buf:
+            line, self._buf = self._buf.split(b"\n", 1)
+            out.append(_sse_line_event(line))
+        return out
+
+    def finish(self) -> list[tuple[str, dict[str, Any] | None]]:
+        """Drain a trailing unterminated line (tolerates sloppy servers)."""
+        if not self._buf:
+            return []
+        line, self._buf = self._buf, b""
+        return [_sse_line_event(line)]
+
+
+def _sse_line_event(line_bytes: bytes) -> tuple[str, dict[str, Any] | None]:
+    """Parse one complete SSE line into a (kind, data-or-None) tuple."""
+    line = line_bytes.decode("utf-8", errors="replace").rstrip("\r")
+    body = None
+    if line.startswith("data: "):
+        body = line[6:]
+    elif line.startswith("data:"):
+        body = line[5:].lstrip()
+    if body is None:
+        return ("raw" if line.strip() else "comment", None)
+    if body == "[DONE]":
+        return ("done", None)
+    try:
+        return ("data", json.loads(body))
+    except json.JSONDecodeError:
+        return ("raw", None)
 
 
 async def _resolve_model(model: str) -> str:
@@ -335,13 +361,14 @@ async def _streaming(request: Request, payload: dict[str, Any],
 
     async def gen() -> AsyncGenerator[bytes]:
         healer = StreamHealer(tool_names=tool_names)
+        sse = _SSEParser()  # reassembles frames split across HTTP chunks
         meta: dict[str, Any] = {}
         usage: dict[str, Any] | None = None
         upstream_finish: str | None = None
         terminated = False  # a finish_reason has been forwarded downstream
         try:
             async for chunk in upstream.aiter_bytes():
-                for kind, data in _sse_events(chunk):
+                for kind, data in sse.feed(chunk):
                     if kind in ("raw", "done"):
                         continue
                     if data is None:

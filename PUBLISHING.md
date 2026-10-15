@@ -38,7 +38,7 @@ grep -H '^version' packages/toolpatch/pyproject.toml apps/proxytool/pyproject.to
 uv run pytest                      # full suite
 uv run ruff check .
 uv run pyright
-./scripts/test-matrix.sh           # or: python3 scripts/test_matrix.py
+uv run nox -s test                 # full 3.10–3.14 matrix (same sessions as CI)
 
 # 4. Build test (both members)
 (cd packages/toolpatch && uv build) && (cd apps/proxytool && uv build)

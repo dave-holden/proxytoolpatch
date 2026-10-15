@@ -40,6 +40,13 @@ class StreamHealer:
     - ``{"type": "content", "text": str}``                       safe to forward
     - ``{"type": "tool_calls", "tool_calls": [...], "stop": True}``  replace stream
     - ``{"type": "content", "text": <remaining buffer>}``        flush at finish
+
+    Multi-call aggregation: once any tool-call leak has been seen, the
+    healer enters *collecting* mode — no further prose is released and the
+    promotion is deferred to the stream end (or a 4x``max_buffer`` cap), so
+    rapid-succession or parallel blocks (Hermes/fenced/raw, in any mix) all
+    land in ONE ``tool_calls`` frame instead of promoting the first call
+    and suppressing the rest.
     """
 
     def __init__(self, max_buffer: int = 512,
@@ -51,6 +58,8 @@ class StreamHealer:
         self._holding = False
         self._leak_open = False  # a partial leak prefix is in flight
         self._done = False  # a leak was extracted; suppress plain content after
+        self._seen_call = False  # collecting mode: aggregate until stream end
+        self._cap = max_buffer * 4  # collecting-mode bound
         self._log = logger or log
 
     # -- public ------------------------------------------------------------
@@ -63,21 +72,16 @@ class StreamHealer:
         # Try to decide with what we have (cheap probe: full extractor on buffer).
         ex = extract_tool_calls(self._buf, self._tool_names)
         if ex is not None:
-            # Surplus prose outside the repaired call (retained window,
-            # reasoning tags' text, pre-object preamble) must survive too —
-            # mirrors the finish() branch below.
-            if ex.content:
-                events.append({"type": "content", "text": ex.content})
-            events.append({
-                "type": "tool_calls",
-                "tool_calls": ex.tool_calls,
-                "stop": True,
-            })
-            self._buf = ""
-            self._done = True
-            self._holding = False
-            self._leak_open = False
-            self._log.debug("StreamHealer extracted tool calls: %d call(s)", len(ex.tool_calls))
+            self._seen_call = True
+        if self._seen_call:
+            # Collecting mode: more calls (rapid succession, parallel
+            # blocks, mixed families) may still be streaming downstream, so
+            # the promotion waits for the stream end — they all land in ONE
+            # ``tool_calls`` frame. Bounded by ``_cap`` for streams that
+            # rack up endless trailing content after a call.
+            if len(self._buf) >= self._cap:
+                self._log.debug("StreamHealer cap reached; promoting buffer")
+                return self._promote(allow_unterminated=False)
             return events
 
         if self._should_release():
@@ -89,7 +93,17 @@ class StreamHealer:
             keep = max(len(_HERMES_OPEN), len(_JSON_BRACE)) - 1
             emit, self._buf = self._buf[:-keep], self._buf[-keep:]
             if emit:
-                events.append({"type": "content", "text": emit})
+                # A leak callee can start inside the release slice itself:
+                # with a partial open tag at the slice boundary the extractor
+                # cannot yet resolve a call, so re-judge the WHOLE slice
+                # before emitting it as prose. If an open/unresolvable tag is
+                # now in the slice, un-release: re-buffer and hold.
+                if _HERMES_OPEN in emit or self._midbuf_leak(emit):
+                    self._buf = emit + self._buf
+                    self._leak_open = True
+                    self._log.debug("StreamHealer un-releasing slice with leak shape")
+                else:
+                    events.append({"type": "content", "text": emit})
         return events
 
     def finish(self) -> list[dict]:
@@ -98,21 +112,39 @@ class StreamHealer:
             return []
         if not self._buf:
             return []
+        return self._promote(allow_unterminated=True)
+
+    def _promote(self, allow_unterminated: bool) -> list[dict]:
+        """Resolve the buffer: emit residual content once, then the calls.
+
+        Single promotion point for both feed-time cap overflow and the
+        stream end. An unterminated Hermes tag is only tolerated at the
+        very end of the stream; mid-stream caps flush what resolved.
+        """
         ex = extract_tool_calls(self._buf, self._tool_names,
-                                allow_unterminated_hermes=True)
+                                allow_unterminated_hermes=allow_unterminated)
         buf = self._buf
         self._buf = ""
         self._done = True
+        self._seen_call = False
         if ex is None:
-            return [{"type": "content", "text": buf}]
-        return [
-            {"type": "tool_calls", "tool_calls": ex.tool_calls, "stop": True},
-            *(
-                [{"type": "content", "text": ex.content}]
-                if ex.content else
-                []
-            ),
-        ]
+            if buf:
+                return [{"type": "content", "text": buf}]
+            return []
+        events: list[dict] = []
+        # Residual prose (retained window, reasoning tags' text,
+        # pre/post-object preamble) must survive — emitted BEFORE the
+        # promotion frame so a client renders it around the same turn.
+        if ex.content:
+            events.append({"type": "content", "text": ex.content})
+        events.append({
+            "type": "tool_calls",
+            "tool_calls": ex.tool_calls,
+            "stop": True,
+        })
+        self._log.debug("StreamHealer extracted tool calls: %d call(s)",
+                        len(ex.tool_calls))
+        return events
 
     # -- internals ---------------------------------------------------------
     def _should_release(self) -> bool:
