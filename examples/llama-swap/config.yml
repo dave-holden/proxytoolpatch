@@ -1,0 +1,31 @@
+# llama-swap upstream example — run as: llama-swap --config llama-swap/config.yml
+# It serves an OpenAI-compatible gateway on http://127.0.0.1:8080 and spawns
+# llama-server per <model> on first use (V2 API; `groups` keeps a single model
+# loaded at a time so one GPU serves several models).
+#
+# Point proxytool at it and add client-alias mapping:
+#
+#     proxytool serve --upstream-url http://127.0.0.1:8080 \
+#       --model-map '{"qwen-gguf":"qwen2.5-coder-14b-instruct-q4_k_m"}'
+#
+# or see examples/proxytool/proxytool.toml for the TOML equivalent
+# ([upstream] url + [model_map]).
+#
+# Swappable parts: the HF source path in `cmd` (llama-swap rewrites ${model}
+# to the value under `model`), the ctx size, and the port — update
+# proxytool's --model-map to match.
+
+healthCheckTimeout: 120          # seconds; a 14B GGUF cold load can be slow
+logLevel: info
+
+models:
+  qwen2.5-coder-14b-instruct-q4_k_m:
+    cmd: |
+      llama-server
+        --host 127.0.0.1 --port ${PORT}
+        --ctx-size 16384 --jinja
+        --model /models/HF_Qwen2.5-Coder-14B-Instruct-GGUF/qwen2.5-coder-14b-instruct-q4_k_m.gguf
+
+groups:                          # one loaded model at a time (swap on demand)
+  "swap":
+    - "qwen2.5-coder-14b-instruct-q4_k_m"

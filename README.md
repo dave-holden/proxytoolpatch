@@ -46,8 +46,8 @@ structured tool calls — even when the model leaks them as raw text.
 |---|---|---|---|
 | `apps/proxytool` | app | The proxy server + `proxytool` CLI: serve, supervise backends, route by model id, repair leaked tool calls in-flight | [`apps/proxytool/README.md`](apps/proxytool/README.md) |
 | `packages/toolpatch` | library | Pure-logic repair engine: `extract_tool_calls`, `heal_json`, `StreamHealer`, `normalize_chat_request` — embeddable by any Python server | [`packages/toolpatch/README.md`](packages/toolpatch/README.md) |
-| `scripts/` | dev tools | `dev-rig.sh` (one-command backend + proxy rig), fake leaking upstream, `pi-smoke.sh` | [`scripts/README.md`](scripts/README.md) |
-| `config/` | configs | Ready-made opencode / pi client configs pointed at the proxy | — |
+| `examples/` | runnable examples | Copy-paste config files: proxytool TOML, opencode + pi client wiring, llama-swap upstream | [`examples/README.md`](examples/README.md) |
+| `scripts/` | local tooling | Personal dev scripts (dev rig, hooks, test matrix) — intentionally untracked, not needed to run the modules | — |
 
 The naming: `toolpatch` is the published library name; both components work for any small local model, not just
 Qwen.
@@ -69,7 +69,6 @@ a rename candidate).
 
 ```bash
 uv run proxytool serve     # default: 127.0.0.1:8180 → http://127.0.0.1:8181
-./scripts/dev-rig.sh       # one-command dev rig: backend (fake/GGUF/MLX) + proxy, health-checked
 ```
 
 The `proxytool` command is a console script registered in the app package
@@ -111,14 +110,14 @@ proxytool stop                                             # logs: /tmp/proxytoo
 ```
 
 Prefer zero flags on the day-to-day? A config file makes `proxytool start`
-bare: `cp config/proxytool-example.toml ~/.config/proxytool/config.toml`,
+bare: `cp examples/proxytool/proxytool.toml ~/.config/proxytool/config.toml`,
 then `proxytool start` / `proxytool stop` just work. Precedence is
 **flag > env > config file > default** — full schema and discovery order in
 [`apps/proxytool/README.md`](apps/proxytool/README.md#config-file). The file
 is strictly validated at load (`proxytool config print` shows exactly what
 resolved, and where every value came from).
 
-Client wiring (opencode `config/*.jsonc`, pi `config/pi-models.json`) and the
+Client wiring (opencode `examples/opencode-*.jsonc`, pi `examples/pi/models.json`) and the
 detailed recipes, env-var table and flags: [`apps/proxytool/README.md`](apps/proxytool/README.md).
 What the two pieces actually repair when a model leaks: [`packages/toolpatch/README.md`](packages/toolpatch/README.md).
 
@@ -138,13 +137,14 @@ so `noxfile.py` is the single source of truth for what “checked” means.
 `uv run nox` locally is exactly what `test-matrix` in CI tests.
 
 Live model / real-client tests are opt-in (`LMW_LIVE=1`) and auto-skip —
-see [`apps/proxytool/README.md`](apps/proxytool/README.md#tests--checks) and
-[`scripts/README.md`](scripts/README.md) for the opt-in one-shots.
+see [`apps/proxytool/README.md`](apps/proxytool/README.md#tests--checks).
 
 Matrix / hooks / CI / PR setup:
 
-- Multi-version matrix: `./scripts/test-matrix.sh` (Python 3.10–3.14, per module)
-- Git hooks: `./scripts/install-hooks.sh` — pre-push runs lint + tests
+- Multi-version matrix: `uv run nox -s test` (Python 3.10–3.14, both modules) —
+  the same nox sessions CI runs; a local `scripts/test-matrix.sh` equivalent
+  exists in untracked local tooling
+- Git hooks: optional, see `docs/DEVELOPMENT.md` — pre-push runs lint + tests
 - CI mirrors all of it on every PR (`.github/workflows/test.yml`); publishing
   is tag-driven and test-gated (`.github/workflows/publish.yml`)
 - PR/branch-protection steps + daemon CLI (start/stop/status/health/models):

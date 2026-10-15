@@ -83,7 +83,13 @@ Plus the supporting repairs:
   llama-server-style chat templates reject with 4xx (leaked-JSON "twins" of
   repaired tool calls, adjacent assistant turns).
 - **Streaming** — `StreamHealer` does the same work on SSE content deltas
-  with bounded buffering (time-to-first-token is preserved).
+  with bounded buffering (time-to-first-token is preserved). It is an
+  in-flight accumulator, not "buffer until the first complete match": prose
+  is released as soon as no leak-shape opener is in flight, with an 8-char
+  suffix window so an opener straddling two deltas is re-judged whole.
+  Reasoning-tag-wrapped leaks (`gpt-think … <tool_call>` mid-buffer) are held by
+  a mid-buffer opener check, not just tail rules — the Qwen2.5 mlx pattern
+  that motivated it.
 
 ## API
 
@@ -119,7 +125,12 @@ literal. Returns the repaired JSON string, or `None` when unrecoverable.
 
 Streaming variant, for SSE content deltas. Feed it partial text as it
 arrives; it buffers only while a tool-call leak might be forming (bounded by
-`max_buffer`) and yields plain-dict events:
+`max_buffer`) and yields plain-dict events. Boundary safety is built in:
+fragments are re-judged over the whole buffer each delta (`max(7, 9)−1 = 8`
+trailing chars are held back, so a leak opener split across two deltas is
+seen whole once the next delta completes it), and on extraction the leak
+text is *removed* from the leftover content and later deltas are suppressed
+— the raw leak is never forwarded, so clients can't render duplicate text.
 
 ```python
 healer = StreamHealer()
