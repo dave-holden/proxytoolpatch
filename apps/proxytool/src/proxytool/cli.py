@@ -490,7 +490,7 @@ def cmd_start(args: Any) -> int:
     # Rebuild the exact serve invocation from the parsed flags.
     argv = [sys.executable, "-m", "proxytool", "serve", "--host", host, "--port", str(port)]
     for name in ("backend", "model", "upstream_url", "model_map", "model_map_file",
-                 "upstream_api_key"):
+                 "upstream_api_key", "upstream_timeout"):
         v = getattr(args, name, None)
         if v:
             argv += [f"--{name.replace('_', '-')}", str(v)]

@@ -517,7 +517,7 @@ def _detail_for(key: str) -> str:
     if m:
         return f"routing.{m.group(1).lower()}.url"
     m = re.fullmatch(
-        r"LTP_PROCESS_([A-Z0-9_]+)_(?:" + "|".join(_PROCESS_KEYS) + r")", key)
+        r"LTP_PROCESS_([A-Z0-9_]+?)_(" + "|".join(_PROCESS_KEYS) + r")", key)
     if m:
         return f"managed.{m.group(1).lower()}.{m.group(2).lower()}"
     return ""

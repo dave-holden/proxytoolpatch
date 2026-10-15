@@ -16,28 +16,28 @@ standard OpenAI-compatible server, put this in front of it, and agent clients
 structured tool calls — even when the model leaks them as raw text.
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Agent clients:  opencode · pi · curl · any OpenAI-compatible      │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │ HTTP (OpenAI dialect)
-┌──────────────────────────▼───────────────────────────────────────┐
-│  proxytool  (apps/proxytool) — the runnable app                    │
-│  FastAPI + `proxytool` CLI: bind, supervise, route, sanitize       │
-│  requests, repair leaked tool calls (streaming + non-streaming),   │
-│  guard against repetition loops — all repair logic via the         │
-│  library below                                                     │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │ in-process import
-┌──────────────────────────▼───────────────────────────────────────┐
-│  toolpatch  (packages/toolpatch) — the repair library              │
-│  Pure, zero-I/O Python: leak detection (Hermes / fenced / bare     │
-│  JSON), JSON healing, SSE stream healing, history normalization    │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │ HTTP (OpenAI dialect)
-┌──────────────────────────▼───────────────────────────────────────┐
-│  Backend servers: llama-server (GGUF) · mlx_lm.server · omlx ·     │
-│  llama-swap · any OpenAI-compatible local inference server         │
-└──────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  Agent clients:  opencode · pi · curl · any OpenAI-compatible    │
+  └──────────────────────────┬───────────────────────────────────────┘
+                             │ HTTP (OpenAI dialect)
+  ┌──────────────────────────▼───────────────────────────────────────┐
+  │  proxytool  (apps/proxytool) — the runnable app                  │
+  │  FastAPI + `proxytool` CLI: bind, supervise, route, sanitize     │
+  │  requests, repair leaked tool calls (streaming + non-streaming), │
+  │  guard against repetition loops — all repair logic via the       │
+  │  library below                                                   │
+  └──────────────────────────┬───────────────────────────────────────┘
+                             │ in-process import
+  ┌──────────────────────────▼───────────────────────────────────────┐
+  │  toolpatch  (packages/toolpatch) — the repair library            │
+  │  Pure, zero-I/O Python: leak detection (Hermes / fenced / bare   │
+  │  JSON), JSON healing, SSE stream healing, history normalization  │
+  └──────────────────────────┬───────────────────────────────────────┘
+                             │ HTTP (OpenAI dialect)
+  ┌──────────────────────────▼───────────────────────────────────────┐
+  │  Backend servers: llama-server (GGUF) · mlx_lm.server · omlx ·   │
+  │  llama-swap · any OpenAI-compatible local inference server       │
+  └──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Modules
@@ -89,7 +89,6 @@ for you, then shuts it down cleanly when you Ctrl-C:
 ```bash
 proxytool serve --backend gguf --model "$MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
 proxytool serve --backend mlx --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
-# clients point at http://127.0.0.1:8180/v1
 ```
 
 **2. llama-swap picks the model on demand** — llama-swap already spins
@@ -98,7 +97,6 @@ backends up/down from its own YAML; put proxytool in front of it:
 ```bash
 proxytool serve --upstream-url http://127.0.0.1:8080 \
   --model-map '{"qwen-gguf":"<real llama-swap model id>","qwen-mlx":"<real id>"}'
-# opencode config / pi models.json still point at http://127.0.0.1:8180/v1
 ```
 
 **3. Run it in the background** (daemon) instead of a foreground terminal:
