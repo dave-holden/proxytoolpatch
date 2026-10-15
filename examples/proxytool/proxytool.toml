@@ -18,8 +18,7 @@ log_level = "info"          # debug | info | warning | error
 # ── single-backend setup: llama-swap (or any OpenAI-compatible gateway) ──────
 [upstream]
 url = "http://127.0.0.1:8080"
-# backend = "gguf"          # request-sanitizer mode: gguf | mlx | omlx | fake
-# model = "/models/qwen.gguf"          # only when proxytool launches the backend itself
+# backend = "gguf"          # optional repair-sanitizer hint (env LMW_BACKEND)
 # timeout = 600             # seconds; cover cold model loads
 # api_key = "sk-..."        # static bearer token sent upstream
 
@@ -36,19 +35,6 @@ url = "http://127.0.0.1:8080"
 # default = true
 #
 # default_backend = "mlx"   # top-level: backend used when no model list matches
-
-# ── child processes (proxytool starts/supervises them) ───────────────────────
-# Instead of pointing at llama-swap, let proxytool own the backend: uncomment
-# the [managed.*] block, set [upstream] backend + model (NOT url), and delete
-# the [upstream] url line. One of base_url or port is required so proxytool
-# can health-check the child before serving traffic.
-# [managed.gguf]
-# command = "llama-server --host 127.0.0.1 --port 8181 --ctx-size 16384 --jinja --model /models/qwen2.5-coder-14b-instruct-q4_k_m.gguf"
-# port = 8181
-# base_url = "http://127.0.0.1:8181"
-# health_path = "/health"
-# startup_timeout = 120.0
-# shutdown_timeout = 30.0
 
 # ── client alias → real model id ─────────────────────────────────────────────
 # Aliases in opencode/pi configs are meaningless to the upstream; this map
