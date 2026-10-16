@@ -65,12 +65,21 @@ def _flag_or_env(args: Any, env_keys: list[str], attr: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="proxytool",
-        description="Launch the proxytool middleware (FastAPI) — optionally "
-                    "managing the local LLM backend(s) it fronts.",
+        description="Launch the proxytool middleware (FastAPI) — a "
+                    "self-only OpenAI-compatible proxy that fronts an "
+                    "existing upstream and repairs its broken tool-call "
+                    "output (backend process management is out of scope).",
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    s = sub.add_parser("serve", help="run the middleware in the foreground")
+    s = sub.add_parser(
+        "serve", help="run the middleware in the foreground",
+        description="Run the middleware in the foreground: an OpenAI-compatible "
+                    "proxy that routes requests to the configured upstream "
+                    "backend(s) and repairs broken tool-call JSON on their "
+                    "responses. Runs until interrupted (Ctrl-C); server and "
+                    "request logs go to this terminal.",
+    )
     s.add_argument("--host", default=None, help="bind host (LTP_HOST, default 127.0.0.1)")
     s.add_argument("--port", type=int, default=None, help="bind port (LTP_PORT, default 8180)")
 
@@ -117,13 +126,34 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--config", default=None, help=config_help_line())
 
     # Lifecycle subcommands operate on an already-running (or not) server.
+    lifecycle_descriptions = {
+        "status":
+            "Report the state of a server launched via `start`: RUNNING with "
+            "pid and URL, STALE if the pid is gone, or STOPPED if no state "
+            "file exists. Exit code reflects the state; starts nothing.",
+        "stop":
+            "Stop the server started by `start`: sends SIGTERM and waits up "
+            "to 15s for it to exit, then SIGKILL. Clears the state file "
+            "whether the pid was alive or already stale. No effect on "
+            "foreground `serve` processes — Ctrl-C those yourself.",
+        "health":
+            "Probe /health on the middleware and on each registered upstream "
+            "backend and print a JSON report. Read-only diagnostic; never "
+            "starts a server (a backend without /health is probed via "
+            "/v1/models instead).",
+        "models":
+            "Ask each registered upstream for /v1/models and list the model "
+            "ids it serves. Read-only diagnostic used to pick routing model "
+            "names and to sanity-check a backend's loaded artifacts.",
+    }
     for name, help_text in (
         ("status", "show the running/not-running state of the middleware"),
         ("stop", "stop a proxytool started with `start` (graceful SIGTERM)"),
         ("health", "probe /health on the middleware and each registered backend"),
         ("models", "list the model ids each upstream reports (/v1/models)"),
     ):
-        sp = sub.add_parser(name, help=help_text)
+        sp = sub.add_parser(name, help=help_text,
+                            description=lifecycle_descriptions[name])
         sp.add_argument("--host", default=None, help="middleware host (LTP_HOST)")
         sp.add_argument("--port", type=int, default=None, help="middleware port (LTP_PORT)")
         sp.add_argument("--config", default=None, help=config_help_line())
@@ -131,6 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
     start = sub.add_parser(
         "start",
         help="daemonize: launch `serve` in the background, return immediately",
+        description="Launch `serve` as a detached background daemon with the "
+                    "same flags and return once the server answers /health "
+                    "(up to 30s). The daemon's output goes to a log file "
+                    "instead of this terminal — proxytool-serve.log beside "
+                    "the state file. Manage it with `status` and `stop`.",
     )
     # `start` forwards every serve flag; build it by mirroring serve's args.
     _mirror_serve_args(start)
@@ -160,7 +195,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="machine-readable output instead of the table")
     c.add_argument("--config", default=None, help=config_help_line())
 
-    sub.add_parser("version", help="print the proxytool version")
+    sub.add_parser(
+        "version", help="print the proxytool version",
+        description="Print the installed proxytool package version (or a "
+                    "dev-checkout marker when it is not installed), then exit.",
+    )
     return p
 
 
