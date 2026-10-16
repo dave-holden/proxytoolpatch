@@ -37,7 +37,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           # Scope the cache key by the module (and optionally python version)
           # to prevent matrix jobs from stepping on each other's toes
-          cache-suffix: ${{ matrix.module }}
+          cache-suffix: ${{ matrix.python-version }}-${{ matrix.module }}
 
       - name: nox test_${{ matrix.module }} on py${{ matrix.python-version }}
         run: >
