@@ -22,28 +22,28 @@ standard OpenAI-compatible server, put this in front of it, and agent clients
 structured tool calls — even when the model leaks them as raw text.
 
 ```
-  ┌──────────────────────────────────────────────────────────────────┐
-  │  Agent clients:  opencode · pi · curl · any OpenAI-compatible    │
-  └──────────────────────────┬───────────────────────────────────────┘
-                             │ HTTP (OpenAI dialect)
-  ┌──────────────────────────▼───────────────────────────────────────┐
-  │  proxytool  (apps/proxytool) — the runnable app                  │
-  │  FastAPI + `proxytool` CLI: bind, supervise, route, sanitize     │
-  │  requests, repair leaked tool calls (streaming + non-streaming), │
-  │  guard against repetition loops — all repair logic via the       │
-  │  library below                                                   │
-  └──────────────────────────┬───────────────────────────────────────┘
-                             │ in-process import
-  ┌──────────────────────────▼───────────────────────────────────────┐
-  │  toolpatch  (packages/toolpatch) — the repair library            │
-  │  Pure, zero-I/O Python: leak detection (Hermes / fenced / bare   │
-  │  JSON), JSON healing, SSE stream healing, history normalization  │
-  └──────────────────────────┬───────────────────────────────────────┘
-                             │ HTTP (OpenAI dialect)
-  ┌──────────────────────────▼───────────────────────────────────────┐
-  │  Backend servers: llama-server (GGUF) · mlx_lm.server · omlx ·   │
-  │  llama-swap · any OpenAI-compatible local inference server       │
-  └──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Agent clients:  opencode · pi · curl · any OpenAI-compatible    │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │ HTTP (OpenAI dialect)
+┌──────────────────────────▼───────────────────────────────────────┐
+│  proxytool  (apps/proxytool) — the runnable app                  │
+│  FastAPI + `proxytool` CLI: bind, supervise, route, sanitize     │
+│  requests, repair leaked tool calls (streaming + non-streaming), │
+│  guard against repetition loops — all repair logic via the       │
+│  library below                                                   │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │ in-process import
+┌──────────────────────────▼───────────────────────────────────────┐
+│  toolpatch  (packages/toolpatch) — the repair library            │
+│  Pure, zero-I/O Python: leak detection (Hermes / fenced / bare   │
+│  JSON), JSON healing, SSE stream healing, history normalization  │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │ HTTP (OpenAI dialect)
+┌──────────────────────────▼───────────────────────────────────────┐
+│  Backend servers: llama-server (GGUF) · mlx_lm.server · omlx ·   │
+│  llama-swap · any OpenAI-compatible local inference server       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Modules
@@ -138,6 +138,7 @@ proxytool serve --upstream-url http://127.0.0.1:8080      # foreground
 # or the daemon form: returns once its /health answers
 proxytool start --upstream-url http://127.0.0.1:8080
 proxytool status && proxytool health && proxytool models
+uv run proxytool status && uv run proxytool health && uv run proxytool models
 proxytool stop
 ```
 
@@ -196,8 +197,8 @@ see [`apps/proxytool/README.md`](apps/proxytool/README.md#tests--checks).
 Matrix / hooks / CI / PR setup:
 
 - Multi-version matrix: `uv run nox -s test` (Python 3.10–3.14, both modules) —
-  the same nox sessions CI runs; a local `scripts/test-matrix.sh` equivalent
-  exists in untracked local tooling
+  the same nox sessions CI runs (a local test-matrix helper may exist in your
+  untracked tooling; the repo itself needs only nox)
 - Git hooks: optional, see `docs/DEVELOPMENT.md` — pre-push runs lint + tests
 - CI mirrors all of it on every PR (`.github/workflows/test.yml`); publishing
   is tag-driven and test-gated (`.github/workflows/publish.yml`)
@@ -206,5 +207,8 @@ Matrix / hooks / CI / PR setup:
 
 ## Design history
 
-Full design rationale and history lives in `PLAN.md`; release notes in
-`RELEASE.md`.
+Design rationale and release notes are maintained as local-only files,
+deliberately outside the repo, so this README stays authoritative for a
+fresh clone. What the repo itself ships is the git tag history — pushing
+a version tag publishes both wheels through
+`.github/workflows/publish.yml` (test-gated).
