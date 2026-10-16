@@ -1,6 +1,13 @@
 """proxytool: FastAPI middleware conduit standing between agent clients and Qwen servers."""
 
 import logging as _logging
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _metadata_version
+
+try:
+    __version__: str = _metadata_version("proxytool")
+except PackageNotFoundError:  # unbuilt dev checkout
+    __version__ = "0.0.0.dev0+local"
 
 
 def configure_logging(*, level: str | None = None, quiet: bool = False) -> None:

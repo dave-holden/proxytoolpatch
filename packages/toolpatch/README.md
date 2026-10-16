@@ -240,5 +240,5 @@ raises the library's logger — one knob for everything.)
 
 ## Status
 
-`v1.0.0`. Depends only on `pydantic`
-(a candidate for stdlib-only before publishing — see root `PLAN.md`).
+`v2.0.0`. Depends only on `pydantic`
+(a candidate for stdlib-only before publishing).
