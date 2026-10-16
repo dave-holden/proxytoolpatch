@@ -4,23 +4,25 @@ __pycache__/
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
 # Virtual environments
-.venv
 .venv/
 .idea/
 .pytest_cache/
 .ruff_cache/
 .coverage
-*.egg-info/
+.nox/
 
+# Local-only working files (deliberately not part of the repo)
 PLAN.md
 RELEASE.md
 Running.md
+Obsolete/
+history.txt
+oc-stderr.log
 
-**/*.log
-
+# Agent/assistant tool state
 .claude/
 .cursor/
 .aider/
@@ -28,46 +30,31 @@ Running.md
 .continue/
 .freebuff
 
-history.txt
-
-config/*
-# !config/opencode.jsonc
-# !config/opencode-gguf.jsonc
-# !config/opencode-mlx.jsonc
-# !config/pi-models.json
-# !config/proxytool-example.toml
-
-**/.DS_Store
-*.pyo
-*.pyc
-__pycache__
-
-oc-stderr.log
-
-/assets
+# Untracked local developer tooling (documented in docs/DEVELOPMENT.md:
+# git hooks, dev rig, test matrix — nothing in the repo depends on them)
 scripts/
-strip-commit-footer.sh
 
+# Local config copies (the tracked, canonical configs live in examples/)
+config/*
+
+# Local capture images / build artifacts pulled in from external builds
 apps/proxytool/public/assets/images/proxytool-with-bg.webp
-
 packages/toolpatch/public/assets/images/toolpatch-with-bg.webp
-
 public/assets/images/proxytoolpatch-with-bg.webp
 public/assets/images/proxytoolpatch.png
 
+# Ad-hoc probe/debug scripts, if ever recreated locally
 debug_hermes.py
 probe_extract.py
 probe_stream.py
 probe_test_const.py
 
-examples/opencode-gguf.jsonc
-examples/opencode-mlx.jsonc
-examples/proxytool/proxytool.toml
-
-# coverage artifacts
+# Coverage artifacts
 htmlcov/
 coverage.xml
 
-/docs/DEVELOPMENT.md
-/PLAN.md
-/PUBLISHING.md
+# OS junk
+**/.DS_Store
+
+# Catch-all for stray logs
+*.log

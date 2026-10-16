@@ -55,7 +55,7 @@ executing the tool. proxytool repairs it in-flight:
   messages + tools), nudges the model, and aborts after a bounded number of
   repeats.
 
-**Status:** v1.0.0 — GGUF (llama-server) and MLX (mlx_lm.server) both
+**Status:** v2.0.0 — GGUF (llama-server) and MLX (mlx_lm.server) both
 round-trip verified end-to-end in live agent sessions. Ships a `proxytool`
 multi-backend routing over already-running OpenAI-compatible servers.
 
@@ -74,7 +74,7 @@ multi-backend routing over already-running OpenAI-compatible servers.
 
 ## The `proxytool` CLI
 
-A thin launcher around the FastAPI app (`proxytool/cli.py`; entry point
+A thin launcher around the FastAPI app (`src/proxytool/cli.py`; entry point
 registered in `apps/proxytool/pyproject.toml` as a `project.scripts` console
 script, so installing the package puts `proxytool` on your PATH). It does
 *not* replace Uvicorn: it builds a uvicorn server in-process after

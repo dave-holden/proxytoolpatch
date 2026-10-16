@@ -1,5 +1,13 @@
 """toolpatch: LLM tool-calling template-mismatch detector and repairer."""
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _metadata_version
+
+try:
+    __version__: str = _metadata_version("toolpatch")
+except PackageNotFoundError:  # unbuilt dev checkout
+    __version__ = "0.0.0.dev0+local"
+
 from toolpatch.extractor import ExtractedToolCalls, extract_tool_calls
 from toolpatch.fixer import heal_json
 from toolpatch.logging import NullLogger, configure_logger, get_logger
@@ -32,6 +40,7 @@ __all__ = [
     "ExtractedToolCalls",
     "NullLogger",
     "StreamHealer",
+    "__version__",
     "configure_logger",
     "extract_tool_calls",
     "get_logger",
