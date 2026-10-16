@@ -254,8 +254,8 @@ class TestValidateConfig:
     fast at load time with a pointed message instead of becoming indirect
     runtime symptoms."""
 
-    _REPO_EXAMPLE = Path(__file__).resolve().parents[3] / "config" / \
-        "proxytool-example.toml"
+    _REPO_EXAMPLE = Path(__file__).resolve().parents[3] / "examples" / \
+        "proxytool" / "proxytool.toml"
 
     def _expect_error(self, tmp_path, text: str, match: str) -> None:
         p = _write_toml(tmp_path, text)
