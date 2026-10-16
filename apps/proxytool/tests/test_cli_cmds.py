@@ -341,6 +341,47 @@ def test_python_dash_m_proxytool_help_exits_zero():
     assert "serve" in res.stdout
 
 
+def test_every_subcommand_help_has_a_description_paragraph():
+    """Each subcommand's --help opens with a description paragraph.
+
+    Argparse renders the subparser description between the usage block and
+    the "options:" section; assert it is present and substantial for every
+    subcommand, and that the top-level help matches the v2 self-only scope
+    (no claim that proxytool manages backend processes).
+    """
+    parser = cli.build_parser()
+    sub = parser._subparsers
+    assert sub is not None  # required=True subparsers exist
+    first_group = sub._group_actions[0]
+    assert isinstance(first_group.choices, dict) and first_group.choices
+    choices = first_group.choices
+    res = subprocess.run([sys.executable, "-m", "proxytool", "--help"],
+                         capture_output=True, text=True, timeout=30)
+    top = res.stdout
+    assert res.returncode == 0
+    assert "self-only" in top
+    assert "optionally managing the local LLM backend" not in top
+
+    for name in choices:
+        out = subprocess.run(
+            [sys.executable, "-m", "proxytool", name, "--help"],
+            capture_output=True, text=True, timeout=30)
+        assert out.returncode == 0, name
+        lines = out.stdout.splitlines()
+        # Description = nonblank lines between the usage ladder's first
+        # blank line and the options/positional section header.
+        first_blank = next(i for i, line in enumerate(lines) if not line.strip())
+        desc: list[str] = []
+        for line in lines[first_blank:]:
+            if line.strip() in ("options:", "positional arguments:", "usage:"):
+                break
+            if line.strip():
+                desc.append(line)
+        assert len(desc) >= 2, f"{name}: no description paragraph:\n{out.stdout!r}"
+        assert not desc[0].lstrip().startswith("["), (
+            f"{name}: usage ladder leaked into description: {desc[0]!r}")
+
+
 # ---------------------------------------------------------------- real-server smoke
 class _OKHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
