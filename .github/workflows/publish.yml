@@ -20,33 +20,39 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.13"
-      - name: build toolpatch
+      # In a uv workspace, `uv build` resolves to the workspace root and drops
+      # artifacts into <root>/dist regardless of current dir — so build per
+      # package with explicit out-dirs and publish from those files.
+      - name: build toolpatch sdist + wheel
         run: |
-          cd packages/toolpatch
-          uv build
-          ls dist/
-      - name: build proxytool (app wheel — declares toolpatch + console script)
+          uv build --package toolpatch --out-dir dist/toolpatch
+          ls dist/toolpatch/
+      - name: build proxytool sdist + wheel (app wheel — declares toolpatch + console script)
         run: |
-          cd apps/proxytool
-          uv build
-          ls dist/
+          uv build --package proxytool --out-dir dist/proxytool
+          ls dist/proxytool/
       - name: publish to testpypi on rc tags
         if: ${{ contains(github.ref_name, 'rc') }}
         run: |
-          cd packages/toolpatch
-          uv publish --publish-url https://test.pypi.org/legacy/ dist/*
-          cd ../../apps/proxytool
-          uv publish --publish-url https://test.pypi.org/legacy/ dist/*
+          uv publish --publish-url https://test.pypi.org/legacy/ dist/toolpatch/*
+          uv publish --publish-url https://test.pypi.org/legacy/ dist/proxytool/*
       - name: publish to pypi
         if: ${{ !contains(github.ref_name, 'rc') }}
         run: |
-          cd packages/toolpatch
-          uv publish dist/*
-          cd ../../apps/proxytool
-          uv publish dist/*
+          uv publish dist/toolpatch/*
+          uv publish dist/proxytool/*
       - name: smoke-test installs in clean venv (library + app CLI on PATH)
         run: |
           cd /tmp
-          uv venv smoke && uv pip install --python smoke/bin/python proxytool
+          uv venv smoke
+          if [[ "${{ github.ref_name }}" == *rc* ]]; then
+            # rc tags published to testpypi — smoke-test THAT publication,
+            # falling back to real PyPI for anything not on testpypi
+            uv pip install --python smoke/bin/python \
+              --index-url https://test.pypi.org/simple/ \
+              --extra-index-url https://pypi.org/simple/ proxytool
+          else
+            uv pip install --python smoke/bin/python proxytool
+          fi
           smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
           smoke/bin/proxytool version   # proves the console-script entry point
