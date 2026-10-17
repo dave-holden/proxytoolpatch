@@ -26,10 +26,11 @@ prepared:
 
 ## Local quality gates (active now, remote or not)
 
-A local, untracked `scripts/` directory (git hooks, dev rig, the fake
-upstream) may exist on your machine if you created the quality-gate hook
-before it was retired from tracking — it is per-developer tooling, not part
-of either published module. Everything below works from a **fresh clone**:
+A local, untracked `scripts/` directory (dev rig, test matrix, the fake
+upstream) may exist on your machine — it is per-developer tooling, not part
+of either published module. Git hooks are now tracked in `.githooks/`
+(hook shims plus the quality gate they run). Everything below works from a
+**fresh clone**:
 
 ```bash
 uv run nox -s lint        # ruff
@@ -43,9 +44,14 @@ The `dev` dependency group includes `httpx2` — since starlette ≥ 1.7 the
 warns via starlette's legacy `httpx` fallback. Plain `httpx` stays the
 runtime dependency (the proxy conduit imports it directly).
 
-- **pre-push/pre-commit hooks** (optional): a `scripts/pre-push-gate.sh`
-  wired via `git config core.hooksPath scripts/hooks` run `ruff` + pytest;
-  with no custom `core.hooksPath` git skips them.
+- **pre-push/pre-commit hooks** (tracked in `.githooks/`, once per clone):
+  ```bash
+  ./.githooks/install.sh   # sets git config core.hooksPath .githooks
+  ```
+  Thereafter every commit runs the reduced gate (ruff + default-python
+  pytest) and every push runs the same without extra scope. Bypass in a
+  genuine emergency: `git push --no-verify` (the CI gate will still report
+  the truth after the push).
 - Bypass in a genuine emergency: `git push --no-verify` (the CI gate will
   still report the truth after the push).
 
