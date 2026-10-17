@@ -6,55 +6,96 @@ on:
 
 jobs:
   tests-gate:
-    uses: ./.github/workflows/test.yml
+    uses: ./.github/workflows/test.yml   # must declare `on: workflow_call`
 
-  build-and-publish:
+  build:
     needs: tests-gate
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
-      id-token: write # PyPI trusted publishing (preferred) — set up once on PyPI
       contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.13"
-      # In a uv workspace, `uv build` resolves to the workspace root and drops
-      # artifacts into <root>/dist regardless of current dir — so build per
-      # package with explicit out-dirs and publish from those files.
-      - name: build toolpatch sdist + wheel
+      - run: uv build --package toolpatch --out-dir dist/toolpatch
+      - run: uv build --package proxytool --out-dir dist/proxytool
+      - uses: actions/upload-artifact@v5
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/proxytool/
+    permissions:
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - name: publish to testpypi
         run: |
-          uv build --package toolpatch --out-dir dist/toolpatch
-          ls dist/toolpatch/
-      - name: build proxytool sdist + wheel (app wheel — declares toolpatch + console script)
+          for pkg in toolpatch proxytool; do
+            uv publish \
+              --trusted-publishing always \
+              --publish-url https://test.pypi.org/legacy/ \
+              --check-url https://test.pypi.org/simple/ \
+              dist/$pkg/*
+          done
+      - name: smoke-test from testpypi
         run: |
-          uv build --package proxytool --out-dir dist/proxytool
-          ls dist/proxytool/
-      - name: publish to testpypi on rc tags
-        if: ${{ contains(github.ref_name, 'rc') }}
-        run: |
-          uv publish --publish-url https://test.pypi.org/legacy/ dist/toolpatch/*
-          uv publish --publish-url https://test.pypi.org/legacy/ dist/proxytool/*
-      - name: publish to pypi
-        if: ${{ !contains(github.ref_name, 'rc') }}
-        # --check-url makes the step re-runnable: files already on PyPI at the
-        # same version+hash are skipped instead of failing the upload
-        run: |
-          uv publish --check-url https://pypi.org/simple/ dist/toolpatch/*
-          uv publish --check-url https://pypi.org/simple/ dist/proxytool/*
-      - name: smoke-test installs in clean venv (library + app CLI on PATH)
-        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           cd /tmp
           uv venv smoke
-          if [[ "${{ github.ref_name }}" == *rc* ]]; then
-            # rc tags published to testpypi — smoke-test THAT publication,
-            # falling back to real PyPI for anything not on testpypi
-            uv pip install --python smoke/bin/python \
+          # retry: index propagation can lag a few seconds
+          for i in 1 2 3 4 5; do
+            uv pip install --python smoke/bin/python --refresh \
               --index-url https://test.pypi.org/simple/ \
-              --extra-index-url https://pypi.org/simple/ proxytool
-          else
-            uv pip install --python smoke/bin/python proxytool
-          fi
+              --extra-index-url https://pypi.org/simple/ \
+              "proxytool==$VERSION" && break
+            sleep 15
+          done
           smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
-          smoke/bin/proxytool version   # proves the console-script entry point
+          smoke/bin/proxytool version
+
+  publish-pypi:
+    needs: publish-testpypi
+    if: ${{ !contains(github.ref_name, 'rc') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/proxytool/
+    permissions:
+      id-token: write
+    steps:
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - name: publish to pypi
+        run: |
+          for pkg in toolpatch proxytool; do
+            uv publish \
+              --trusted-publishing always \
+              --check-url https://pypi.org/simple/ \
+              dist/$pkg/*
+          done
+      - name: smoke-test from pypi
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd /tmp
+          uv venv smoke
+          for i in 1 2 3 4 5; do
+            uv pip install --python smoke/bin/python --refresh "proxytool==$VERSION" && break
+            sleep 15
+          done
+          smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
+          smoke/bin/proxytool version
