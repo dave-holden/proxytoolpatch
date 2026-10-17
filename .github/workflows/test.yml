@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_call:
 
 # Every job expresses its intent through a nox session (noxfile.py) instead of
 # hand-written uv commands: nox is the single source of truth for what
