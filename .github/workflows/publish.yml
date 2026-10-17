@@ -38,9 +38,11 @@ jobs:
           uv publish --publish-url https://test.pypi.org/legacy/ dist/proxytool/*
       - name: publish to pypi
         if: ${{ !contains(github.ref_name, 'rc') }}
+        # --check-url makes the step re-runnable: files already on PyPI at the
+        # same version+hash are skipped instead of failing the upload
         run: |
-          uv publish dist/toolpatch/*
-          uv publish dist/proxytool/*
+          uv publish --check-url https://pypi.org/simple/ dist/toolpatch/*
+          uv publish --check-url https://pypi.org/simple/ dist/proxytool/*
       - name: smoke-test installs in clean venv (library + app CLI on PATH)
         run: |
           cd /tmp
