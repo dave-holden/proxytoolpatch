@@ -54,14 +54,25 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           cd /tmp
           uv venv smoke
-          # retry: index propagation can lag a few seconds
+          # Install ONLY our two wheels from testpypi (--no-deps): resolving
+          # names across indexes is unsafe there — real-PyPI names beat
+          # testpypi-only versions under first-index, and testpypi squatters
+          # (e.g. a fake fastapi 1.0 that fails to build) win under
+          # unsafe-best-match. Runtime deps come from real PyPI instead.
           for i in 1 2 3 4 5; do
             uv pip install --python smoke/bin/python --refresh \
+              --no-deps \
               --index-url https://test.pypi.org/simple/ \
-              --extra-index-url https://pypi.org/simple/ \
-              "proxytool==$VERSION" && break
+              "toolpatch==$VERSION" "proxytool==$VERSION" && break
             sleep 15
           done
+          # derive the runtime requirements from the installed wheel itself,
+          # drop toolpatch (already installed from testpypi) and fetch the
+          # rest from real PyPI; keeps this step in sync with pyproject
+          smoke/bin/python -c "import importlib.metadata as md; print('\n'.join(md.requires('proxytool')))" \
+            | grep -v '^toolpatch' > /tmp/deps.txt || true
+          uv pip install --python smoke/bin/python \
+            --index-url https://pypi.org/simple/ -r /tmp/deps.txt
           smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
           smoke/bin/proxytool version
 
