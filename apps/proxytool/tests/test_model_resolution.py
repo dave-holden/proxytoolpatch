@@ -74,7 +74,7 @@ def test_exact_upstream_id_passes_through(client, mock_upstream):
 
 
 def test_lmw_model_map_takes_precedence(client, mock_upstream, monkeypatch):
-    """An explicit LMW_MODEL_MAP entry wins — no upstream discovery is attempted."""
+    """An explicit PTP_MODEL_MAP entry wins — no upstream discovery is attempted."""
     monkeypatch.setattr(
         main_mod.settings, "model_map", {"qwen-mlx": "mapped-explicit/id"}
     )

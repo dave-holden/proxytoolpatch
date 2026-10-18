@@ -38,7 +38,7 @@ def test_configure_logging_quiet_forces_error_level():
 
 
 def test_configure_logging_env_falls_back(monkeypatch):
-    monkeypatch.setenv("LTP_LOG_LEVEL", "warning")
+    monkeypatch.setenv("PTP_LOG_LEVEL", "warning")
     pairs = _saved_handlers("proxytool", "toolpatch")
     for lg, _ in pairs:
         lg.handlers = []
@@ -51,7 +51,7 @@ def test_configure_logging_env_falls_back(monkeypatch):
 
 
 def test_configure_logging_invalid_env_level_raises(monkeypatch):
-    monkeypatch.setenv("LTP_LOG_LEVEL", "bogus")
+    monkeypatch.setenv("PTP_LOG_LEVEL", "bogus")
     pairs = _saved_handlers("proxytool", "toolpatch")
     for lg, _ in pairs:
         lg.handlers = []
@@ -89,7 +89,7 @@ def test_resolve_level_unknown_raises():
 
 # --------------------------------------------------------------- trace.py
 def test_trace_disabled_by_default_logs_nothing(monkeypatch, capsys):
-    monkeypatch.delenv("LMW_TRACE_FILE", raising=False)
+    monkeypatch.delenv("PTP_TRACE_FILE", raising=False)
     trace.enable(False)
     trace._trace_log = None
     trace._trace_file = None
@@ -122,7 +122,7 @@ def test_trace_enabled_prints_payload_and_via_logger(monkeypatch, capsys):
 
 def test_trace_file_sink_created(monkeypatch, tmp_path):
     sink = tmp_path / "trace.log"
-    monkeypatch.setenv("LMW_TRACE_FILE", str(sink))
+    monkeypatch.setenv("PTP_TRACE_FILE", str(sink))
     trace.enable(True)
     trace._trace_file = None
     trace._trace_log = None
@@ -148,24 +148,24 @@ def test_trace_enabled_flag_toggle():
 
 # --------------------------------------------------------------- settings.py
 def test_model_map_from_env(monkeypatch):
-    monkeypatch.setenv("LTP_MODEL_MAP", '{"alias": "real-id"}')
-    monkeypatch.delenv("LTP_MODEL_MAP_FILE", raising=False)
-    monkeypatch.delenv("LMW_MODEL_MAP_FILE", raising=False)
+    monkeypatch.setenv("PTP_MODEL_MAP", '{"alias": "real-id"}')
+    monkeypatch.delenv("PTP_MODEL_MAP_FILE", raising=False)
+    monkeypatch.delenv("PTP_MODEL_MAP_FILE", raising=False)
     assert settings._model_map() == {"alias": "real-id"}
 
 
 def test_model_map_file_wins(monkeypatch, tmp_path):
     f = tmp_path / "map.json"
     f.write_text(json.dumps({"from-file": "model-x"}), encoding="utf-8")
-    monkeypatch.setenv("LTP_MODEL_MAP_FILE", str(f))
-    monkeypatch.setenv("LTP_MODEL_MAP", '{"from-env": "ignored"}')
+    monkeypatch.setenv("PTP_MODEL_MAP_FILE", str(f))
+    monkeypatch.setenv("PTP_MODEL_MAP", '{"from-env": "ignored"}')
     assert settings._model_map() == {"from-file": "model-x"}
 
 
 def test_model_map_none():
     import os as _os
     saved = {k: _os.environ.get(k) for k in
-             ("LTP_MODEL_MAP", "LMW_MODEL_MAP", "LTP_MODEL_MAP_FILE", "LMW_MODEL_MAP_FILE")}
+             ("PTP_MODEL_MAP", "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE", "PTP_MODEL_MAP_FILE")}
     for k in saved:
         _os.environ.pop(k, None)
     try:
@@ -178,9 +178,9 @@ def test_model_map_none():
 
 def test_settings_loop_flags_zero_disables():
     import os as _os
-    saved = {k: _os.environ.get(k) for k in ("LTP_LOOP_NUDGE", "LTP_LOOP_ABORT")}
-    _os.environ["LTP_LOOP_NUDGE"] = "0"
-    _os.environ["LTP_LOOP_ABORT"] = "0"
+    saved = {k: _os.environ.get(k) for k in ("PTP_LOOP_NUDGE", "PTP_LOOP_ABORT")}
+    _os.environ["PTP_LOOP_NUDGE"] = "0"
+    _os.environ["PTP_LOOP_ABORT"] = "0"
     try:
         s = settings.get_settings()
         assert s.loop_nudge == 0 and s.loop_abort == 0

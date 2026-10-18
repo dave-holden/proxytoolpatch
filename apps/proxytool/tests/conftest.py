@@ -23,7 +23,7 @@ def _reset_loop_guard():
 
 @pytest.fixture()
 def client(mock_upstream, monkeypatch):
-    monkeypatch.setenv("LMW_UPSTREAM_URL", "http://127.0.0.1:8181")
+    monkeypatch.setenv("PTP_UPSTREAM_URL", "http://127.0.0.1:8181")
     from proxytool.main import app
 
     return TestClient(app)

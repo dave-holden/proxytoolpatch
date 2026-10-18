@@ -1,13 +1,13 @@
 """Live E2E test against a real Qwen backend (llama-server GGUF or mlx_lm.server).
 
-Opt-in: skipped unless ``LMW_LIVE=1``. Requires an upstream already running on
-``LMW_UPSTREAM_URL`` (default ``http://127.0.0.1:8181``) that can actually run
+Opt-in: skipped unless ``PTP_LIVE=1``. Requires an upstream already running on
+``PTP_UPSTREAM_URL`` (default ``http://127.0.0.1:8181``) that can actually run
 the model — start it with ``scripts/dev-rig.sh gguf <model.gguf>`` / ``mlx <model>``,
 or run the whole rig and test together with:
 
-    LMW_LIVE=1 scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf uv-test
+    PTP_LIVE=1 scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf uv-test
 
-Checks the real failure mode end-to-end through the middleware, streaming and
+Checks the real failure mode end-to-end through the proxytool, streaming and
 non-streaming, using a prompt that reliably triggers tool use on Qwen:
 - request side: request accepted (tools/tool_choice sanitized OK)
 - response side: no raw hermes tags / leaked JSON anywhere in the client-visible
@@ -28,9 +28,9 @@ import pytest
 OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()
 CLOSE_TAG = bytes.fromhex("3c2f746f6f6c5f63616c6c3e").decode()
 
-UPSTREAM = os.environ.get("LMW_UPSTREAM_URL", "http://127.0.0.1:8181")
-MIDDLEWARE = os.environ.get("LMW_MIDDLEWARE_URL", "http://127.0.0.1:8180")
-MODEL = os.environ.get("LMW_LIVE_MODEL", "qwen2.5-coder-14b-instruct")
+UPSTREAM = os.environ.get("PTP_UPSTREAM_URL", "http://127.0.0.1:8181")
+PROXY = os.environ.get("PTP_PROXY_URL", "http://127.0.0.1:8180")
+MODEL = os.environ.get("PTP_LIVE_MODEL", "qwen2.5-coder-14b-instruct")
 
 TOOL = {
     "type": "function",
@@ -57,8 +57,8 @@ def _upstream_is_live() -> bool:
 
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("LMW_LIVE") != "1" or not _upstream_is_live(),
-    reason="LMW_LIVE=1 not set or no live upstream on LMW_UPSTREAM_URL",
+    os.environ.get("PTP_LIVE") != "1" or not _upstream_is_live(),
+    reason="PTP_LIVE=1 not set or no live upstream on PTP_UPSTREAM_URL",
 )
 
 
@@ -85,7 +85,7 @@ def test_live_nonstream_repair():
         "messages": [{"role": "user", "content": PROMPT}],
         "tools": [TOOL],
     }
-    r = httpx.post(f"{MIDDLEWARE}/v1/chat/completions", json=body, timeout=180.0)
+    r = httpx.post(f"{PROXY}/v1/chat/completions", json=body, timeout=180.0)
     assert r.status_code == 200, r.text
     msg = r.json()["choices"][0]["message"]
     print("\n[capture:nonstream]", json.dumps({"content": msg.get("content"),
@@ -101,7 +101,7 @@ def test_live_stream_repair():
         "tools": [TOOL],
     }
     with httpx.stream(
-        "POST", f"{MIDDLEWARE}/v1/chat/completions", json=body, timeout=180.0
+        "POST", f"{PROXY}/v1/chat/completions", json=body, timeout=180.0
     ) as r:
         assert r.status_code == 200, r.text
         events, content_deltas, tool_call_chunks = [], [], []
@@ -123,5 +123,5 @@ def test_live_stream_repair():
     joined = "".join(content_deltas)
     assert OPEN_TAG not in joined, f"leaked hermes open tag in stream: {joined!r}"
     assert CLOSE_TAG not in joined, f"leaked hermes close tag in stream: {joined!r}"
-    assert tool_call_chunks, "expected streamed tool_calls from the middleware"
+    assert tool_call_chunks, "expected streamed tool_calls from the proxytool"
     print("\n[capture:stream]", json.dumps({"chunks": [e for e in events[:3]]}, indent=2))

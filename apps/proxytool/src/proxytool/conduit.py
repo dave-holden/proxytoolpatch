@@ -1,4 +1,4 @@
-"""httpx conduit to the upstream (llama-server / mlx server / llama-swap)."""
+"""httpx conduit to the upstream (llama-server / mlx_lm.server / llama-swap)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,26 @@ import httpx
 
 # hop-by-hop/noise headers never forwarded upstream.
 _DROP_HEADERS = {"host", "content-length", "accept-encoding", "connection"}
+
+
+def upstream_path(base_url: str, path: str) -> str:
+    """Canonical app path → path relative to the configured upstream base.
+
+    Base URLs may be bare server roots (`http://host:8080`) or OpenAI-rooted
+    (`http://host:8080/v1`, as llama-swap documents them). With an OpenAI
+    root the canonical `/v1/...` prefix is stripped, so a base of neither
+    spelling can ever produce a doubled `/v1/v1/chat/completions` upstream.
+    """
+    p = path.lstrip("/")
+    b = base_url.rstrip("/")
+    if b.endswith("/v1") and (p == "v1" or p.startswith("v1/")):
+        p = p[len("v1/"):]
+    return p
+
+
+def upstream_url(base_url: str, path: str) -> str:
+    """Absolute form of `upstream_path` — for urllib probes outside httpx."""
+    return f"{base_url.rstrip('/')}/{upstream_path(base_url, path)}"
 
 
 class UpstreamConduit:
@@ -41,7 +61,7 @@ class UpstreamConduit:
                            ) -> httpx.Response:
         async with self.client() as client:
             return await client.post(
-                path,
+                upstream_path(self._base_url, path),
                 json=payload,
                 headers={**self._auth_headers(), **self.forwardable(headers or {})},
             )
@@ -53,7 +73,7 @@ class UpstreamConduit:
         client = self.client()
         request = client.build_request(
             "POST",
-            path,
+            upstream_path(self._base_url, path),
             json=payload,
             headers={**self._auth_headers(), **self.forwardable(headers or {})},
         )
@@ -64,4 +84,5 @@ class UpstreamConduit:
                           content: bytes) -> httpx.Response:
         async with self.client() as client:
             merged = {**self._auth_headers(), **self.forwardable(headers)}
-            return await client.request(method, path, headers=merged, content=content)
+            return await client.request(
+                method, upstream_path(self._base_url, path), headers=merged, content=content)
