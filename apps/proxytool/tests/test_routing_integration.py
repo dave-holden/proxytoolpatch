@@ -84,6 +84,23 @@ def test_model_list_routes_to_second_backend(respx_mock_b, monkeypatch):
     _reset_router()
 
 
+def test_reserved_ptp_upstream_suffixes_are_not_routes(monkeypatch):
+    """Regression guard: settings keys under PTP_UPSTREAM_* must not become
+    named routes when cmd_serve exports them into the same env namespace
+    (they previously made the router front `sk-x`/`42.0` as upstreams)."""
+    from proxytool.routing import backends_from_env
+
+    monkeypatch.setenv("PTP_UPSTREAM_API_KEY", "sk-x")
+    monkeypatch.setenv("PTP_UPSTREAM_TIMEOUT", "42.0")
+    monkeypatch.setenv("PTP_UPSTREAM_URL", "http://127.0.0.1:8181")
+    monkeypatch.setenv("PTP_UPSTREAM_GGUF", BE_A)
+    monkeypatch.setenv("PTP_UPSTREAM_GGUF_MODELS", "qwen-gguf")
+    env = backends_from_env()
+    assert set(env) == {"gguf"}
+    assert env["gguf"].url == BE_A
+    assert env["gguf"].models == ("qwen-gguf",)
+
+
 def test_default_backend_used_when_no_model_match(respx_mock_b, monkeypatch, mock_upstream):
     monkeypatch.setenv("PTP_UPSTREAM_GGUF", BE_A)
     monkeypatch.setenv("PTP_UPSTREAM_MLX", BE_B)
