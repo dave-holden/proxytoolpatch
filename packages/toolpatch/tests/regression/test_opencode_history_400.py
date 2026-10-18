@@ -16,7 +16,7 @@ from itertools import pairwise
 
 from toolpatch.request import normalize_chat_request
 
-_TMP_PATH = "/Users/daveholden/Projects/LAM-Middleware/llama-middleware"
+_TMP_PATH = "/Users/daveholden/Projects/LAM-Proxytool/llama-proxytool"
 
 DIR_LISTING = (
     ".DS_Store\n.freebuff/\n.git/\n.gitignore\n.pytest_cache/\n.python-version\n"
@@ -41,7 +41,7 @@ def _client_history() -> list[dict]:
             "role": "assistant",
             "content": (
                 '{"name": "read", "arguments": '
-                '{"filePath": "/Users/daveholden/Projects/LAM-Middleware/llama-middleware"}}'
+                '{"filePath": "/Users/daveholden/Projects/LAM-Proxytool/llama-proxytool"}}'
             ),
         },
         {
@@ -64,7 +64,7 @@ def _client_history() -> list[dict]:
         {
             "role": "tool",
             "tool_call_id": "call_ae7ac26eb03745b095cc44b4",
-            "content": f"<path>/Users/daveholden/Projects/LAM-Middleware/llama-middleware</path>"
+            "content": f"<path>/Users/daveholden/Projects/LAM-Proxytool/llama-proxytool</path>"
             f"<type>directory</type><entries>{DIR_LISTING}</entries>",
         },
         {"role": "assistant", "content": _ANSWER},

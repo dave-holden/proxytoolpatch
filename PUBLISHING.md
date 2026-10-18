@@ -8,7 +8,7 @@ matrix):
 
 - **`toolpatch`** — the pure-logic repair engine. Import-name dependency-free
   beyond `pydantic`; installable by any Python server needing leak repair.
-- **`proxytool`** — the FastAPI middleware + CLI. Depends on `toolpatch`,
+- **`proxytool`** — the FastAPI proxytool + CLI. Depends on `toolpatch`,
   `fastapi`, `uvicorn`, `httpx`. Its `[project.scripts]` entry-point puts the
   `proxytool` command on the installer's PATH automatically.
 

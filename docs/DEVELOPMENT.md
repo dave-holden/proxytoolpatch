@@ -91,7 +91,7 @@ The app (*proxytool*) is not published; it runs from a workspace checkout.
 proxytool start                     # detached serve; waits for /health
                                     # (fronts your already-running upstream)
 proxytool status                    # running / stopped / stale
-proxytool health                    # JSON: middleware + each backend
+proxytool health                    # JSON: proxytool + each backend
 proxytool models                    # JSON: each upstream's /v1/models
 proxytool stop                      # SIGTERM → grace → SIGKILL, clears state
 proxytool serve --upstream-url http://127.0.0.1:8181   # foreground (as before)
@@ -104,6 +104,6 @@ annotated `examples/proxytool/proxytool.toml`). With the file in place the CLI
 stays minimal — `proxytool start` / `proxytool stop` — while flags/env keep
 winning per-key (flag > env > file > default).
 
-State (pid, port, log path) lives in `$LTP_STATE_PATH` or
+State (pid, port, log path) lives in `$PTP_STATE_PATH` or
 `/tmp/proxytool-serve-state.json`; the log sits next to it. `stop` only stops
 servers started via `start` (foreground `serve` stops with Ctrl-C, as usual).

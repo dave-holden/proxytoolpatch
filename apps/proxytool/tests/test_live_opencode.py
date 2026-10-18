@@ -1,17 +1,17 @@
 """E2E test through **opencode** — the real agent client — instead of raw curl.
 
-Opt-in via ``LMW_LIVE=1`` (also auto-skips when the ``opencode`` CLI is not on
-PATH or no live middleware is reachable). Requires a running rig:
+Opt-in via ``PTP_LIVE=1`` (also auto-skips when the ``opencode`` CLI is not on
+PATH or no live proxytool is reachable). Requires a running rig:
 
     ./scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf      # terminal 1
 
-    LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_opencode.py -q
+    PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_opencode.py -q
     # or one-shot:  ./scripts/dev-rig.sh gguf <model> uv-test
 
 opencode is configured via ``OPENCODE_CONFIG`` (an isolated temp JSONC file) so
 the test never touches ``~/.config/opencode`` — no plugins, no MCP servers, no
 global model defaults leak in. It points a custom ``openai-compatible``
-provider at the middleware and runs ``opencode run --format json``, which
+provider at the proxytool and runs ``opencode run --format json``, which
 emits raw JSON events (assistant text + tool calls), then asserts:
 
 - the run completed without the client choking on the repaired payload
@@ -35,8 +35,8 @@ import pytest
 
 OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()
 
-MIDDLEWARE = os.environ.get("LMW_MIDDLEWARE_URL", "http://127.0.0.1:8180")
-OPENCODE_BIN = os.environ.get("LMW_OPENCODE_BIN", "opencode")
+PROXY = os.environ.get("PTP_PROXY_URL", "http://127.0.0.1:8180")
+OPENCODE_BIN = os.environ.get("PTP_OPENCODE_BIN", "opencode")
 
 PROMPT = (
     "Use the list_dir tool to show me the contents of the current directory. "
@@ -48,23 +48,23 @@ def _opencode_available() -> bool:
     return shutil.which(OPENCODE_BIN) is not None
 
 
-def _middleware_live() -> bool:
+def _proxytool_live() -> bool:
     try:
-        return httpx.get(f"{MIDDLEWARE}/health", timeout=2.0).status_code == 200
+        return httpx.get(f"{PROXY}/health", timeout=2.0).status_code == 200
     except httpx.HTTPError:
         return False
 
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("LMW_LIVE") != "1"
+    os.environ.get("PTP_LIVE") != "1"
     or not _opencode_available()
-    or not _middleware_live(),
-    reason="LMW_LIVE=1 not set, opencode CLI missing, or middleware not running",
+    or not _proxytool_live(),
+    reason="PTP_LIVE=1 not set, opencode CLI missing, or proxytool not running",
 )
 
 
 def _make_opencode_env(workdir: Path) -> tuple[dict[str, str], Path]:
-    """Isolated opencode config: custom provider -> middleware, nothing else."""
+    """Isolated opencode config: custom provider -> proxytool, nothing else."""
     cfg = {
         "$schema": "https://opencode.ai/config.json",
         "autoupdate": False,
@@ -72,9 +72,9 @@ def _make_opencode_env(workdir: Path) -> tuple[dict[str, str], Path]:
         "provider": {
             "proxytool": {
                 "npm": "@ai-sdk/openai-compatible",
-                "name": "llama-middleware",
-                "options": {"apiKey": "not-needed", "baseURL": f"{MIDDLEWARE}/v1"},
-                "models": {"qwen": {"name": "Qwen via llama-middleware"}},
+                "name": "llama-proxytool",
+                "options": {"apiKey": "not-needed", "baseURL": f"{PROXY}/v1"},
+                "models": {"qwen": {"name": "Qwen via llama-proxytool"}},
             }
         },
         "model": "proxytool/qwen",

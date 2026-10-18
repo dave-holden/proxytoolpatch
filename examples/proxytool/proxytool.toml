@@ -2,11 +2,11 @@
 # as ./proxytool.toml in the directory where you run `proxytool start`).
 #
 # Every key is optional; anything you pass as a CLI flag or env var
-# (LTP_* / legacy LMW_*) beats this file:
+# (PTP_*) beats this file:
 #
 #     CLI flag  >  env var  >  config file  >  built-in default
 #
-# Discovery (first hit wins): --config PATH, $LTP_CONFIG, ./proxytool.toml,
+# Discovery (first hit wins): --config PATH, $PTP_CONFIG, ./proxytool.toml,
 # ./.proxytool.toml, $XDG_CONFIG_HOME/proxytool/config.toml,
 # ~/.config/proxytool/config.toml.
 
@@ -17,8 +17,7 @@ log_level = "info"          # debug | info | warning | error
 
 # ── single-backend setup: llama-swap (or any OpenAI-compatible gateway) ──────
 [upstream]
-url = "http://127.0.0.1:8080"
-# backend = "gguf"          # optional repair-sanitizer hint (env LMW_BACKEND)
+url = "http://127.0.0.1:8080/v1"
 # timeout = 600             # seconds; cover cold model loads
 # api_key = "sk-..."        # static bearer token sent upstream
 

@@ -1,11 +1,11 @@
 """Backend routing table: which upstream does a request hit.
 
 Backends can be declared on the CLI via repeatable ``--upstream NAME=URL``
-flags or through ``LTP_UPSTREAM_<NAME>`` / ``LTP_UPSTREAM_DEFAULT`` env vars
+flags or through ``PTP_UPSTREAM_<NAME>`` / ``PTP_UPSTREAM_DEFAULT`` env vars
 (environment wins unless the flag is passed explicitly). Each backend carries
 an optional comma-separated model list — ``--upstream gguf=http://...:8181
 --upstream-models gguf=qwen-gguf,qwen`` — and the client-facing ``model`` id is
-matched against it first, then against ``LTP_DEFAULT_BACKEND`` / the flag
+matched against it first, then against ``PTP_DEFAULT_BACKEND`` / the flag
 default. Exactly one registered backend receives everything.
 """
 
@@ -61,19 +61,26 @@ class BackendRouter:
         return RouteDecision(d, "default")
 
 
+# Var suffixes under PTP_UPSTREAM_* that are single-upstream *settings*, not
+# named routes: PTP_UPSTREAM_URL / _DEFAULT / _API_KEY / _TIMEOUT.
+# Everything else in that namespace is a route name (PTP_UPSTREAM_<NAME>=URL,
+# PTP_UPSTREAM_<NAME>_MODELS=m1,m2).
+RESERVED_ROUTE_SUFFIXES = ("URL", "DEFAULT", "API_KEY", "TIMEOUT")
+
+
 def backends_from_env() -> dict[str, Backend]:
-    """Build backends from LTP_UPSTREAM_<NAME> / _MODELS / _DEFAULT env vars."""
+    """Build backends from PTP_UPSTREAM_<NAME> / _MODELS / _DEFAULT env vars."""
     out: dict[str, Backend] = {}
     for var, val in os.environ.items():
-        if not var.startswith("LTP_UPSTREAM_"):
+        if not var.startswith("PTP_UPSTREAM_"):
             continue
-        rest = var[len("LTP_UPSTREAM_"):]
+        rest = var[len("PTP_UPSTREAM_"):]
         if rest.endswith("_MODELS"):
             continue
-        if rest == "DEFAULT":
+        if rest in RESERVED_ROUTE_SUFFIXES:
             continue
         name = rest.lower().replace("-", "_")
-        models_var = f"LTP_UPSTREAM_{rest}_MODELS"
+        models_var = f"PTP_UPSTREAM_{rest}_MODELS"
         models = tuple(
             m.strip() for m in os.environ.get(models_var, "").split(",") if m.strip()
         )
@@ -81,7 +88,7 @@ def backends_from_env() -> dict[str, Backend]:
             name=name,
             url=val.rstrip("/"),
             models=models,
-            default=os.environ.get("LTP_DEFAULT_BACKEND", "").lower() == name,
+            default=os.environ.get("PTP_DEFAULT_BACKEND", "").lower() == name,
         )
     return out
 
