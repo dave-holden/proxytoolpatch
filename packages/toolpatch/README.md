@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/images/toolpatch.png" alt="toolpatch" width="200">
+  <img src="public/assets/images/toolpatch.webp" alt="toolpatch" width="200">
 </p>
 
 # toolpatch
