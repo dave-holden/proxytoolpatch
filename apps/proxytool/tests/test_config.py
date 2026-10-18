@@ -19,14 +19,14 @@ from proxytool.config import (
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    """Start from a clean LTP/LMW env AND undo the bridge's own mutations.
+    """Start from a clean PTP env AND undo the bridge's own mutations.
 
     The bridge mutates ``os.environ`` directly (that is its job at runtime);
     monkeypatch alone cannot undo that, so snapshot and restore explicitly to
     keep polluting later test modules.
     """
     for k in list(os.environ):
-        if k.startswith(("LTP_", "LMW_", "XDG_CONFIG_HOME", "LTP_CONFIG")):
+        if k.startswith("PTP_") or k in ("XDG_CONFIG_HOME",):
             monkeypatch.delenv(k, raising=False)
     snapshot = dict(os.environ)
     yield
@@ -62,9 +62,9 @@ class TestFindConfig:
         with pytest.raises(ValueError, match="not found"):
             find_config("/nope/proxytool.toml")
 
-    def test_ltp_config_env(self, tmp_path, monkeypatch):
+    def test_ptp_config_env(self, tmp_path, monkeypatch):
         p = _write_toml(tmp_path, "port = 1")
-        monkeypatch.setenv("LTP_CONFIG", str(p))
+        monkeypatch.setenv("PTP_CONFIG", str(p))
         assert find_config(None) == p
 
     def test_xdg_fallback(self, tmp_path, monkeypatch):
@@ -118,45 +118,38 @@ class TestBridgeSettings:
         ))
         path, _cfg, info = _apply_toml_config(_args(), serve=True)
         assert path == tmp_path / "proxytool.toml"
-        assert os.environ["LTP_HOST"] == "0.0.0.0"
-        assert os.environ["LTP_PORT"] == "9999"
-        assert os.environ["LTP_LOG_LEVEL"] == "debug"
-        assert os.environ["LTP_UPSTREAM_URL"] == "http://127.0.0.1:8080"
-        assert os.environ["LTP_UPSTREAM_TIMEOUT"] == "600"
-        assert os.environ["LTP_UPSTREAM_API_KEY"] == "sk-t"
-        assert json.loads(os.environ["LTP_MODEL_MAP"]) == {"a": "b"}
-        assert os.environ["LTP_LOOP_NUDGE"] == "2"
-        assert os.environ["LTP_LOOP_ABORT"] == "4"
-        assert "LTP_UPSTREAM_URL" in info["applied"]
+        assert os.environ["PTP_HOST"] == "0.0.0.0"
+        assert os.environ["PTP_PORT"] == "9999"
+        assert os.environ["PTP_LOG_LEVEL"] == "debug"
+        assert os.environ["PTP_UPSTREAM_URL"] == "http://127.0.0.1:8080"
+        assert os.environ["PTP_UPSTREAM_TIMEOUT"] == "600"
+        assert os.environ["PTP_UPSTREAM_API_KEY"] == "sk-t"
+        assert json.loads(os.environ["PTP_MODEL_MAP"]) == {"a": "b"}
+        assert os.environ["PTP_LOOP_NUDGE"] == "2"
+        assert os.environ["PTP_LOOP_ABORT"] == "4"
+        assert "PTP_UPSTREAM_URL" in info["applied"]
 
     def test_flag_wins_over_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         _write_toml(tmp_path, 'port = 9999\n[upstream]\nurl = "http://cfg:1"')
         _path, _c, _i = _apply_toml_config(_args(port=8180, upstream_url="http://flag:2"),
                                           serve=True)
-        assert os.environ.get("LTP_PORT", "8180") == "8180"
-        assert "LTP_PORT" not in os.environ
-        assert os.environ.get("LTP_UPSTREAM_URL") in (None, "http://flag:2")
+        assert os.environ.get("PTP_PORT", "8180") == "8180"
+        assert "PTP_PORT" not in os.environ
+        assert os.environ.get("PTP_UPSTREAM_URL") in (None, "http://flag:2")
 
     def test_env_wins_over_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("LTP_UPSTREAM_TIMEOUT", "77")
+        monkeypatch.setenv("PTP_UPSTREAM_TIMEOUT", "77")
         _write_toml(tmp_path, "[upstream]\ntimeout = 600")
         _apply_toml_config(_args(), serve=True)
-        assert os.environ["LTP_UPSTREAM_TIMEOUT"] == "77"
-
-    def test_legacy_lmw_env_also_blocks_config(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("LMW_BACKEND", "gguf")
-        _write_toml(tmp_path, "host = \"127.0.0.1\"")  # harmless config file
-        _apply_toml_config(_args(), serve=True)
-        assert os.environ["LMW_BACKEND"] == "gguf"  # env untouched by the file
+        assert os.environ["PTP_UPSTREAM_TIMEOUT"] == "77"
 
     def test_quiet_flag_blocks_config_log_level(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         _write_toml(tmp_path, 'log_level = "debug"')
         _apply_toml_config(_args(quiet=True), serve=True)
-        assert "LTP_LOG_LEVEL" not in os.environ
+        assert "PTP_LOG_LEVEL" not in os.environ
 
 
 class TestBridgeRouting:
@@ -171,10 +164,10 @@ class TestBridgeRouting:
             '[routing.mlx]\nurl = "http://127.0.0.1:8281"\n'
         ))
         _apply_toml_config(_args(), serve=True, routing=True)
-        assert os.environ["LTP_UPSTREAM_GGUF"] == "http://127.0.0.1:8181"
-        assert os.environ["LTP_UPSTREAM_GGUF_MODELS"] == "qwen-gguf,qwen"
-        assert os.environ["LTP_UPSTREAM_MLX"] == "http://127.0.0.1:8281"
-        assert os.environ["LTP_DEFAULT_BACKEND"] == "mlx"
+        assert os.environ["PTP_UPSTREAM_GGUF"] == "http://127.0.0.1:8181"
+        assert os.environ["PTP_UPSTREAM_GGUF_MODELS"] == "qwen-gguf,qwen"
+        assert os.environ["PTP_UPSTREAM_MLX"] == "http://127.0.0.1:8281"
+        assert os.environ["PTP_DEFAULT_BACKEND"] == "mlx"
 
     def test_per_entry_default_true(self, tmp_path, monkeypatch):
         """`default = true` on exactly one [routing.*] entry works standalone."""
@@ -185,7 +178,7 @@ class TestBridgeRouting:
             "default = true\n"
         ))
         _apply_toml_config(_args(), serve=True, routing=True)
-        assert os.environ["LTP_DEFAULT_BACKEND"] == "mlx"
+        assert os.environ["PTP_DEFAULT_BACKEND"] == "mlx"
 
     def test_multiple_defaults_rejected(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -201,14 +194,14 @@ class TestBridgeRouting:
         _write_toml(tmp_path, '[routing.gguf]\nurl = "http://cfg:1"')
         _apply_toml_config(_args(upstream=["xx=http://flag:1"]), serve=True,
                            routing=True)
-        assert "LTP_UPSTREAM_GGUF" not in os.environ
+        assert "PTP_UPSTREAM_GGUF" not in os.environ
 
     def test_env_backends_block_config_routing(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("LTP_UPSTREAM_MLX", "http://env:1")
+        monkeypatch.setenv("PTP_UPSTREAM_MLX", "http://env:1")
         _write_toml(tmp_path, '[routing.gguf]\nurl = "http://cfg:1"')
         _apply_toml_config(_args(), serve=True, routing=True)
-        assert "LTP_UPSTREAM_GGUF" not in os.environ
+        assert "PTP_UPSTREAM_GGUF" not in os.environ
 
     def test_routing_entry_without_url_raises(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -222,13 +215,13 @@ class TestTrace:
         monkeypatch.chdir(tmp_path)
         _write_toml(tmp_path, "[trace]\nenabled = true")
         _apply_toml_config(_args(), serve=True)
-        assert os.environ["LTP_TRACE"] == "1"
+        assert os.environ["PTP_TRACE"] == "1"
 
     def test_trace_flag_wins(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         _write_toml(tmp_path, "[trace]\nenabled = true")
         _apply_toml_config(_args(trace=False), serve=True)  # flag false == unset
-        assert os.environ["LTP_TRACE"] == "1"
+        assert os.environ["PTP_TRACE"] == "1"
         # an explicit --trace CLI store_true cannot be distinguished from unset
         # before parsing, so the env bridge keeps config authoritative when the
         # flag was simply absent; this documents that behavior.
@@ -243,10 +236,10 @@ class TestCmdServingPieces:
 
     def test_apply_env_and_config_coexist(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("LTP_PORT", "5000")
+        monkeypatch.setenv("PTP_PORT", "5000")
         _write_toml(tmp_path, "port = 9999")
         _apply_toml_config(_args(), serve=True)
-        assert os.environ["LTP_PORT"] == "5000"
+        assert os.environ["PTP_PORT"] == "5000"
 
 
 class TestValidateConfig:
@@ -313,20 +306,20 @@ class TestDescribeConfig:
         assert info["valid"]
         assert info["file"] == str(tmp_path / "proxytool.toml")
         rows = {r["key"]: r for r in info["settings"]}
-        assert rows["LTP_PORT"]["source"] == "config file"
-        assert rows["LTP_PORT"]["value"] == "9999"
-        assert rows["LTP_PORT"]["detail"] == "port"
-        assert "LTP_PORT" in info["applied"]
+        assert rows["PTP_PORT"]["source"] == "config file"
+        assert rows["PTP_PORT"]["value"] == "9999"
+        assert rows["PTP_PORT"]["detail"] == "port"
+        assert "PTP_PORT" in info["applied"]
 
     def test_env_pre_existing_beats_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("LTP_PORT", "5000")
+        monkeypatch.setenv("PTP_PORT", "5000")
         _write_toml(tmp_path, "port = 9999")
         info = describe_config(_args())
         rows = {r["key"]: r for r in info["settings"]}
-        assert rows["LTP_PORT"]["source"] == "env (pre-existing)"
-        assert rows["LTP_PORT"]["value"] == "5000"
-        assert "LTP_PORT" not in info["applied"]
+        assert rows["PTP_PORT"]["source"] == "env (pre-existing)"
+        assert rows["PTP_PORT"]["value"] == "5000"
+        assert "PTP_PORT" not in info["applied"]
 
     def test_env_restored_after_call(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -361,15 +354,15 @@ class TestConfigCommand:
         assert rc == 0
         assert f"config file: {p}" in out
         assert "validation: ok" in out
-        assert "LTP_PORT" in out
-        assert os.environ.get("LTP_PORT") != "9999"  # dry-run, env untouched
+        assert "PTP_PORT" in out
+        assert os.environ.get("PTP_PORT") != "9999"  # dry-run, env untouched
 
     def test_json_output(self, tmp_path, capsys):
         p = _write_toml(tmp_path, "port = 9999")
         assert cli_mod.main(["config", "print", "--json", "--config", str(p)]) == 0
         data = json.loads(capsys.readouterr().out)
         assert data["file"] == str(p)
-        assert any(r["key"] == "LTP_PORT" for r in data["settings"])
+        assert any(r["key"] == "PTP_PORT" for r in data["settings"])
 
     def test_check_ok_exits_zero(self, tmp_path, capsys):
         p = _write_toml(tmp_path, "port = 9999")

@@ -2,7 +2,7 @@
 
 It does NOT replace Uvicorn: it builds a uvicorn ``Config``/``Server``
 in-process. Every setting can come from either a CLI flag or an env var
-(``LTP_*``, formerly ``LMW_*`` — both are read, ``LTP_`` wins).
+(``PTP_*``).
 
 proxytool only looks after itself: it fronts an *existing* OpenAI-compatible
 upstream. Managing model servers' process lifecycle is out of scope here —
@@ -34,6 +34,7 @@ from typing import Any
 
 import uvicorn
 
+from proxytool.conduit import upstream_url
 from proxytool.config import apply_config, config_help_line, describe_config
 from proxytool.routing import Backend, backends_from_args, backends_from_env
 
@@ -65,7 +66,7 @@ def _flag_or_env(args: Any, env_keys: list[str], attr: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="proxytool",
-        description="Launch the proxytool middleware (FastAPI) — a "
+        description="Launch the proxytool API proxy (FastAPI) — a "
                     "self-only OpenAI-compatible proxy that fronts an "
                     "existing upstream and repairs its broken tool-call "
                     "output (backend process management is out of scope).",
@@ -73,53 +74,54 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser(
-        "serve", help="run the middleware in the foreground",
-        description="Run the middleware in the foreground: an OpenAI-compatible "
+        "serve", help="run proxytool in the foreground",
+        description="Run proxytool in the foreground: an OpenAI-compatible "
                     "proxy that routes requests to the configured upstream "
                     "backend(s) and repairs broken tool-call JSON on their "
                     "responses. Runs until interrupted (Ctrl-C); server and "
                     "request logs go to this terminal.",
     )
-    s.add_argument("--host", default=None, help="bind host (LTP_HOST, default 127.0.0.1)")
-    s.add_argument("--port", type=int, default=None, help="bind port (LTP_PORT, default 8180)")
+    s.add_argument("--host", default=None, help="bind host (PTP_HOST, default 127.0.0.1)")
+    s.add_argument("--port", type=int, default=None, help="bind port (PTP_PORT, default 8180)")
 
     # Routing: which backend(s) to front.
     s.add_argument(
         "--upstream", action="append", default=[], metavar="NAME=URL",
-        help="register a backend, repeatable (LTP_UPSTREAM_<NAME>=URL)",
+        help="register a backend, repeatable (PTP_UPSTREAM_<NAME>=URL)",
     )
     s.add_argument(
         "--upstream-models", action="append", default=[], metavar="NAME=m1,m2",
         help="model ids that route to a backend, repeatable "
-             "(LTP_UPSTREAM_<NAME>_MODELS=...)",
+             "(PTP_UPSTREAM_<NAME>_MODELS=...)",
     )
     s.add_argument(
         "--default-backend", default=None,
-        help="backend used when no model list matches (LTP_DEFAULT_BACKEND)",
+        help="backend used when no model list matches (PTP_DEFAULT_BACKEND)",
     )
     s.add_argument(
         "--upstream-url", default=None,
-        help="standalone single-backend URL (LMW_UPSTREAM_URL/LTP_UPSTREAM_URL)",
+        help="standalone single-backend URL (PTP_UPSTREAM_URL; accepts a "
+             "bare server root or an OpenAI-rooted .../v1 base)",
     )
 
     # Request-side knobs forwarded to Settings.
-    s.add_argument("--model-map", default=None, help="inline JSON map (LMW_MODEL_MAP)")
+    s.add_argument("--model-map", default=None, help="inline JSON map (PTP_MODEL_MAP)")
     s.add_argument("--model-map-file", default=None,
-                   help="JSON file map (LMW_MODEL_MAP_FILE)")
+                   help="JSON file map (PTP_MODEL_MAP_FILE)")
     s.add_argument("--upstream-api-key", default=None, help="bearer token upstream")
     s.add_argument("--upstream-timeout", type=float, default=None,
-                   help="seconds (LMW_UPSTREAM_TIMEOUT)")
-    s.add_argument("--trace", action="store_true", help="LMW_TRACE=1 / LTP_TRACE=1")
+                   help="seconds (PTP_UPSTREAM_TIMEOUT)")
+    s.add_argument("--trace", action="store_true", help="PTP_TRACE=1")
     s.add_argument(
-        "--loop-nudge", type=int, default=None, help="LMW_LOOP_NUDGE (0 = off)"
+        "--loop-nudge", type=int, default=None, help="PTP_LOOP_NUDGE (0 = off)"
     )
     s.add_argument(
-        "--loop-abort", type=int, default=None, help="LMW_LOOP_ABORT (0 = off)"
+        "--loop-abort", type=int, default=None, help="PTP_LOOP_ABORT (0 = off)"
     )
     s.add_argument(
         "--log-level", default=None,
         choices=("debug", "info", "warning", "error"),
-        help="app log level (LTP_LOG_LEVEL / LMW_LOG_LEVEL)"
+        help="app log level (PTP_LOG_LEVEL)"
     )
     s.add_argument("--quiet", action="store_true",
                    help="only log errors; equivalent to --log-level error")
@@ -137,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
             "whether the pid was alive or already stale. No effect on "
             "foreground `serve` processes — Ctrl-C those yourself.",
         "health":
-            "Probe /health on the middleware and on each registered upstream "
+            "Probe /health on proxytool and on each registered upstream "
             "backend and print a JSON report. Read-only diagnostic; never "
             "starts a server (a backend without /health is probed via "
             "/v1/models instead).",
@@ -147,15 +149,15 @@ def build_parser() -> argparse.ArgumentParser:
             "names and to sanity-check a backend's loaded artifacts.",
     }
     for name, help_text in (
-        ("status", "show the running/not-running state of the middleware"),
+        ("status", "show the running/not-running state of proxytool"),
         ("stop", "stop a proxytool started with `start` (graceful SIGTERM)"),
-        ("health", "probe /health on the middleware and each registered backend"),
+        ("health", "probe /health on proxytool and each registered backend"),
         ("models", "list the model ids each upstream reports (/v1/models)"),
     ):
         sp = sub.add_parser(name, help=help_text,
                             description=lifecycle_descriptions[name])
-        sp.add_argument("--host", default=None, help="middleware host (LTP_HOST)")
-        sp.add_argument("--port", type=int, default=None, help="middleware port (LTP_PORT)")
+        sp.add_argument("--host", default=None, help="proxytool host (PTP_HOST)")
+        sp.add_argument("--port", type=int, default=None, help="proxytool port (PTP_PORT)")
         sp.add_argument("--config", default=None, help=config_help_line())
 
     start = sub.add_parser(
@@ -169,8 +171,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # `start` forwards every serve flag; build it by mirroring serve's args.
     _mirror_serve_args(start)
-    start.add_argument("--host", default=None, help="bind host (LTP_HOST)")
-    start.add_argument("--port", type=int, default=None, help="bind port (LTP_PORT)")
+    start.add_argument("--host", default=None, help="bind host (PTP_HOST)")
+    start.add_argument("--port", type=int, default=None, help="bind port (PTP_PORT)")
     start.add_argument("--log-level", default=None,
                        choices=("debug", "info", "warning", "error"),
                        help="app log level for the daemonized server")
@@ -206,30 +208,30 @@ def build_parser() -> argparse.ArgumentParser:
 def _merge_env_into_process_env(args: Any,
                                 backends: dict[str, Backend]) -> None:
     """Ensure settings_* env vars are visible to a reloaded ProxySettings."""
-    if args.upstream_api_key and not os.environ.get("LMW_UPSTREAM_API_KEY"):
-        os.environ["LMW_UPSTREAM_API_KEY"] = args.upstream_api_key
-    if args.upstream_timeout and not os.environ.get("LMW_UPSTREAM_TIMEOUT"):
-        os.environ["LMW_UPSTREAM_TIMEOUT"] = str(args.upstream_timeout)
-    if args.model_map and not os.environ.get("LMW_MODEL_MAP"):
-        os.environ["LMW_MODEL_MAP"] = args.model_map
-    if args.model_map_file and not os.environ.get("LMW_MODEL_MAP_FILE"):
-        os.environ["LMW_MODEL_MAP_FILE"] = args.model_map_file
-    if args.trace and not os.environ.get("LMW_TRACE"):
-        os.environ["LMW_TRACE"] = "1"
-    if args.loop_nudge is not None and not os.environ.get("LMW_LOOP_NUDGE"):
-        os.environ["LMW_LOOP_NUDGE"] = str(args.loop_nudge)
-    if args.loop_abort is not None and not os.environ.get("LMW_LOOP_ABORT"):
-        os.environ["LMW_LOOP_ABORT"] = str(args.loop_abort)
-    if backends and not os.environ.get("LTP_DEFAULT_BACKEND"):
+    if args.upstream_api_key and not os.environ.get("PTP_UPSTREAM_API_KEY"):
+        os.environ["PTP_UPSTREAM_API_KEY"] = args.upstream_api_key
+    if args.upstream_timeout and not os.environ.get("PTP_UPSTREAM_TIMEOUT"):
+        os.environ["PTP_UPSTREAM_TIMEOUT"] = str(args.upstream_timeout)
+    if args.model_map and not os.environ.get("PTP_MODEL_MAP"):
+        os.environ["PTP_MODEL_MAP"] = args.model_map
+    if args.model_map_file and not os.environ.get("PTP_MODEL_MAP_FILE"):
+        os.environ["PTP_MODEL_MAP_FILE"] = args.model_map_file
+    if args.trace and not os.environ.get("PTP_TRACE"):
+        os.environ["PTP_TRACE"] = "1"
+    if args.loop_nudge is not None and not os.environ.get("PTP_LOOP_NUDGE"):
+        os.environ["PTP_LOOP_NUDGE"] = str(args.loop_nudge)
+    if args.loop_abort is not None and not os.environ.get("PTP_LOOP_ABORT"):
+        os.environ["PTP_LOOP_ABORT"] = str(args.loop_abort)
+    if backends and not os.environ.get("PTP_DEFAULT_BACKEND"):
         d = next((n for n, b in backends.items() if b.default), None)
         if d:
-            os.environ["LTP_DEFAULT_BACKEND"] = d
+            os.environ["PTP_DEFAULT_BACKEND"] = d
 
 
 def _pick_single_backend_url(backends: dict[str, Backend], args: Any,
                              env_upstream: str) -> str:
     """When the app-level Settings only supports one upstream, pick it here."""
-    explicit = _flag_or_env(args, ["LTP_UPSTREAM_URL", "LMW_UPSTREAM_URL"], "upstream_url")
+    explicit = _flag_or_env(args, ["PTP_UPSTREAM_URL"], "upstream_url")
     if explicit:
         return explicit
     if backends:
@@ -269,33 +271,32 @@ def cmd_serve(args: Any) -> int:
     # uvicorn.run), so resolved values must be exported as env, not mutated
     # on a local instance uvicorn never sees.
     resolved_url = _pick_single_backend_url(
-        backends, args, os.environ.get("LMW_UPSTREAM_URL", "")
+        backends, args, os.environ.get("PTP_UPSTREAM_URL", "")
     )
-    os.environ["LMW_UPSTREAM_URL"] = resolved_url
-    os.environ.setdefault("LTP_UPSTREAM_URL", resolved_url)
+    os.environ["PTP_UPSTREAM_URL"] = resolved_url
     # Multi-backend table: only export when the user declared >1 backend (or
     # declared one by name) — a single default backend would otherwise make
     # proxytool.main build a router where single-conduit logic already suffices.
     named = [b for b in backends.values() if b.name != "default"]
     if len(named) >= 2 or (len(named) == 1 and not args.upstream_url):
         for b in named:
-            os.environ[f"LTP_UPSTREAM_{b.name.upper()}"] = b.url
+            os.environ[f"PTP_UPSTREAM_{b.name.upper()}"] = b.url
             if b.models:
-                os.environ[f"LTP_UPSTREAM_{b.name.upper()}_MODELS"] = ",".join(b.models)
+                os.environ[f"PTP_UPSTREAM_{b.name.upper()}_MODELS"] = ",".join(b.models)
         d = next((b for b in backends.values() if b.default and b.name != "default"), None)
         if d:
-            os.environ["LTP_DEFAULT_BACKEND"] = d.name
+            os.environ["PTP_DEFAULT_BACKEND"] = d.name
     if args.trace:
-        os.environ["LMW_TRACE"] = "1"
-    print(f"[proxytool] middleware on {args.host or '127.0.0.1'}:{args.port or 8180}"
+        os.environ["PTP_TRACE"] = "1"
+    print(f"[proxytool] proxy on {args.host or '127.0.0.1'}:{args.port or 8180}"
           f" → upstream {resolved_url}", file=sys.stderr, flush=True)
 
     # 4. Run uvicorn in-process; SIGINT/SIGTERM propagate normally.
     uvicorn.run(
         "proxytool.main:app",
-        host=args.host or os.environ.get("LTP_HOST", "127.0.0.1"),
-        port=args.port if args.port is not None else int(os.environ.get("LTP_PORT", "8180")),
-        log_level=os.environ.get("LTP_LOG_LEVEL", "info"),
+        host=args.host or os.environ.get("PTP_HOST", "127.0.0.1"),
+        port=args.port if args.port is not None else int(os.environ.get("PTP_PORT", "8180")),
+        log_level=os.environ.get("PTP_LOG_LEVEL", "info"),
     )  # blocking
     return 0
 
@@ -369,7 +370,7 @@ def _mirror_serve_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _state_path() -> pathlib.Path:
-    if p := os.environ.get("LTP_STATE_PATH"):
+    if p := os.environ.get("PTP_STATE_PATH"):
         return pathlib.Path(p)
     return pathlib.Path(tempfile.gettempdir()) / "proxytool-serve-state.json"
 
@@ -400,8 +401,8 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _host_port(args: Any) -> tuple[str, int]:
-    host = args.host or os.environ.get("LTP_HOST", "127.0.0.1")
-    port = args.port if args.port is not None else int(os.environ.get("LTP_PORT", "8180"))
+    host = args.host or os.environ.get("PTP_HOST", "127.0.0.1")
+    port = args.port if args.port is not None else int(os.environ.get("PTP_PORT", "8180"))
     return str(host), port
 
 
@@ -517,20 +518,20 @@ def cmd_start(args: Any) -> int:
 
 
 def cmd_health(args: Any) -> int:
-    """Probe the middleware and every registered backend; print a JSON report."""
+    """Probe the proxytool and every registered backend; print a JSON report."""
     import urllib.request
 
-    # Config can define the middleware host/port and the [routing.*] table so
+    # Config can define the proxytool host/port and the [routing.*] table so
     # `proxytool health` "just works" without repeating flags/env.
     _apply_toml_config(args, serve=False, routing=True)
 
     host, port = _host_port(args)
-    report: dict[str, Any] = {"middleware": {"url": f"http://{host}:{port}", "ok": False}}
+    report: dict[str, Any] = {"proxytool": {"url": f"http://{host}:{port}", "ok": False}}
     try:
         with urllib.request.urlopen(f"http://{host}:{port}/health", timeout=3) as r:
-            report["middleware"]["ok"] = r.status < 400
+            report["proxytool"]["ok"] = r.status < 400
     except Exception as e:
-        report["middleware"]["error"] = str(e)
+        report["proxytool"]["error"] = str(e)
 
     # Backends registered in env (routed setups); probe each, plus /v1/models.
     from proxytool.routing import backends_from_env
@@ -540,11 +541,12 @@ def cmd_health(args: Any) -> int:
     for b in backends.values():
         entry: dict[str, Any] = {"name": b.name, "url": b.url, "ok": False}
         try:
-            with urllib.request.urlopen(b.url.rstrip("/") + "/health", timeout=3) as r:
+            with urllib.request.urlopen(upstream_url(b.url, "health"), timeout=3) as r:
                 entry["ok"] = r.status < 400
         except Exception as e:
             try:
-                with urllib.request.urlopen(b.url.rstrip("/") + "/v1/models", timeout=3) as r:
+                with urllib.request.urlopen(
+                        upstream_url(b.url, "v1/models"), timeout=3) as r:
                     entry["ok"] = r.status < 400  # mlx_lm.server has no /health
                     entry["via"] = "/v1/models fallback"
             except Exception:
@@ -552,7 +554,7 @@ def cmd_health(args: Any) -> int:
         probe_list.append(entry)
     report["backends"] = probe_list
     print(json.dumps(report, indent=2))
-    return 0 if report["middleware"]["ok"] else 1
+    return 0 if report["proxytool"]["ok"] else 1
 
 
 def cmd_models(_args: Any) -> int:
@@ -569,7 +571,7 @@ def cmd_models(_args: Any) -> int:
     for b in backends_from_env().values():
         entry: dict[str, Any] = {"name": b.name, "url": b.url}
         try:
-            with urllib.request.urlopen(b.url.rstrip("/") + "/v1/models", timeout=5) as r:
+            with urllib.request.urlopen(upstream_url(b.url, "v1/models"), timeout=5) as r:
                 data = json.load(r)
                 ids = [m.get("id") for m in data.get("data", []) if isinstance(m, dict)]
                 entry["models"] = ids

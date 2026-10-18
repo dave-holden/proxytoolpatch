@@ -59,17 +59,17 @@ class TestBackendRouter:
 
 class TestBackendsFromEnv:
     def test_env_backends_built_and_flagged_default(self, monkeypatch) -> None:
-        monkeypatch.setenv("LTP_UPSTREAM_GGUF", "http://127.0.0.1:8181")
-        monkeypatch.setenv("LTP_UPSTREAM_GGUF_MODELS", "qwen-gguf, qwen")
-        monkeypatch.setenv("LTP_DEFAULT_BACKEND", "gguf")
+        monkeypatch.setenv("PTP_UPSTREAM_GGUF", "http://127.0.0.1:8181")
+        monkeypatch.setenv("PTP_UPSTREAM_GGUF_MODELS", "qwen-gguf, qwen")
+        monkeypatch.setenv("PTP_DEFAULT_BACKEND", "gguf")
         b = backends_from_env()
         assert b["gguf"].url == "http://127.0.0.1:8181"
         assert b["gguf"].models == ("qwen-gguf", "qwen")
         assert b["gguf"].default is True
 
     def test_env_default_backends_skip_meta_vars(self, monkeypatch) -> None:
-        monkeypatch.setenv("LTP_UPSTREAM_DEFAULT", "gguf")
-        monkeypatch.setenv("LTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
+        monkeypatch.setenv("PTP_UPSTREAM_DEFAULT", "gguf")
+        monkeypatch.setenv("PTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
         assert backends_from_env() == {}
 
 

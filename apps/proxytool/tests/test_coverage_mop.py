@@ -23,7 +23,7 @@ def test_find_config_explicit_missing_raises(tmp_path):
 
 
 def test_find_config_env_missing_raises(monkeypatch, tmp_path):
-    monkeypatch.setenv("LTP_CONFIG", str(tmp_path / "missing.toml"))
+    monkeypatch.setenv("PTP_CONFIG", str(tmp_path / "missing.toml"))
     with pytest.raises(ValueError, match="missing file"):
         config.find_config(None)
 
@@ -37,27 +37,27 @@ def test_load_invalid_toml_raises(tmp_path):
 
 
 def test_search_candidates_explicit_and_env(monkeypatch, tmp_path):
-    monkeypatch.setenv("LTP_CONFIG", str(tmp_path / "via-env.toml"))
+    monkeypatch.setenv("PTP_CONFIG", str(tmp_path / "via-env.toml"))
     assert [p.name for p in config._search_candidates(None)] == ["via-env.toml"]
-    monkeypatch.delenv("LTP_CONFIG")
+    monkeypatch.delenv("PTP_CONFIG")
     assert str(tmp_path / "explicit.toml") in str(config._search_candidates(
         str(tmp_path / "explicit.toml")))
 
 
 def test_detail_for_map():
-    assert config._detail_for("LTP_LOOP_ABORT") == config._SEARCH_DETAIL.get(
-        "LTP_LOOP_ABORT", "")
-    assert config._detail_for("LTP_UPSTREAM_MLX_MODELS") == "routing.mlx.models"
-    assert config._detail_for("LTP_UPSTREAM_MLX") == "routing.mlx.url"
+    assert config._detail_for("PTP_LOOP_ABORT") == config._SEARCH_DETAIL.get(
+        "PTP_LOOP_ABORT", "")
+    assert config._detail_for("PTP_UPSTREAM_MLX_MODELS") == "routing.mlx.models"
+    assert config._detail_for("PTP_UPSTREAM_MLX") == "routing.mlx.url"
     assert config._detail_for("SOME_RANDOM_KEY") == ""
 
 
 def test_relevant_env_keys_filters(monkeypatch):
-    monkeypatch.setenv("LTP_TRACE", "1")
+    monkeypatch.setenv("PTP_TRACE", "1")
     monkeypatch.setenv("UNRELATED", "x")
-    keys = config._relevant_env_keys(["LTP_TRACE", "LTP_CONFIG", "UNRELATED"])
-    assert "LTP_TRACE" in keys
-    assert "LTP_CONFIG" not in keys
+    keys = config._relevant_env_keys(["PTP_TRACE", "PTP_CONFIG", "UNRELATED"])
+    assert "PTP_TRACE" in keys
+    assert "PTP_CONFIG" not in keys
     assert not any(k == "UNRELATED" for k in keys)
 
 
@@ -73,7 +73,7 @@ def test_noop_logger_methods():
 # --------------------------------------------------------------- cli.py
 @pytest.fixture
 def state_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("LTP_STATE_PATH", str(tmp_path / "state.json"))
+    monkeypatch.setenv("PTP_STATE_PATH", str(tmp_path / "state.json"))
     return tmp_path
 
 

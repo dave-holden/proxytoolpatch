@@ -1,7 +1,7 @@
 """Tests for the lifecycle/diagnostic CLI commands and their helpers.
 
 Everything runs in-process against fakes: no daemon, no managed children.
-State files are pointed at tmp_path via LTP_STATE_PATH; env-heavy paths use
+State files are pointed at tmp_path via PTP_STATE_PATH; env-heavy paths use
 monkeypatch so nothing leaks between tests.
 """
 
@@ -30,16 +30,16 @@ def _parse(argv: list[str]):
 @pytest.fixture
 def state_env(tmp_path, monkeypatch):
     """Point the CLI's state file + serve log at the test's tmp dir."""
-    monkeypatch.setenv("LTP_STATE_PATH", str(tmp_path / "state.json"))
+    monkeypatch.setenv("PTP_STATE_PATH", str(tmp_path / "state.json"))
     return tmp_path
 
 
 @pytest.fixture(autouse=True)
 def clean_upstream_env(monkeypatch):
     """Upstream-routing env vars leak across tests; start each one clean."""
-    for var in ("LTP_UPSTREAM_URL", "LMW_UPSTREAM_URL", "LTP_DEFAULT_BACKEND",
-                "LMW_BACKEND", "LMW_UPSTREAM_API_KEY", "LMW_TRACE",
-                "LMW_UPSTREAM_TIMEOUT", "LMW_MODEL_MAP", "LMW_MODEL_MAP_FILE"):
+    for var in ("PTP_UPSTREAM_URL", "PTP_DEFAULT_BACKEND",
+                "PTP_UPSTREAM_API_KEY", "PTP_TRACE",
+                "PTP_UPSTREAM_TIMEOUT", "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -215,10 +215,10 @@ def test_cmd_health_ok_and_backend_fallback(state_env, monkeypatch, capsys):
         return _FakeResp(200)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setenv("LTP_UPSTREAM_B2", "http://127.0.0.1:8191")
+    monkeypatch.setenv("PTP_UPSTREAM_B2", "http://127.0.0.1:8191")
     assert cli.cmd_health(_parse(["health"])) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["middleware"]["ok"] is True
+    assert report["proxytool"]["ok"] is True
     entry = report["backends"][0]
     assert entry["ok"] is True
     assert entry.get("via") == "/v1/models fallback"
@@ -228,8 +228,8 @@ def test_cmd_health_down(state_env, monkeypatch, capsys):
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _FailingResp())
     assert cli.cmd_health(_parse(["health"])) == 1
     report = json.loads(capsys.readouterr().out)
-    assert report["middleware"]["ok"] is False
-    assert "error" in report["middleware"]
+    assert report["proxytool"]["ok"] is False
+    assert "error" in report["proxytool"]
 
 
 # ---------------------------------------------------------------- models
@@ -242,8 +242,8 @@ def test_cmd_models_lists_and_flags_error(state_env, monkeypatch):
         return _FailingResp()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setenv("LTP_UPSTREAM_GOOD", "http://127.0.0.1:8192/v1")
-    monkeypatch.setenv("LTP_UPSTREAM_BAD", "http://127.0.0.1:8193/v1")
+    monkeypatch.setenv("PTP_UPSTREAM_GOOD", "http://127.0.0.1:8192/v1")
+    monkeypatch.setenv("PTP_UPSTREAM_BAD", "http://127.0.0.1:8193/v1")
     assert cli.cmd_models(_parse(["models"])) == 1
 
 
@@ -256,8 +256,8 @@ def test_cmd_models_list_content(state_env, monkeypatch, capsys):
         return _FailingResp()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setenv("LTP_UPSTREAM_GOOD", "http://127.0.0.1:8192/v1")
-    monkeypatch.setenv("LTP_UPSTREAM_BAD", "http://127.0.0.1:8193/v1")
+    monkeypatch.setenv("PTP_UPSTREAM_GOOD", "http://127.0.0.1:8192/v1")
+    monkeypatch.setenv("PTP_UPSTREAM_BAD", "http://127.0.0.1:8193/v1")
     assert cli.cmd_models(_parse(["models"])) == 1
     by_name = {e["name"]: e for e in json.loads(capsys.readouterr().out)}
     assert by_name["good"]["models"] == ["qwen-1", "qwen-2"]
@@ -268,8 +268,8 @@ def test_cmd_models_list_content(state_env, monkeypatch, capsys):
 def test_cmd_serve_runs_uvicorn_once(state_env, monkeypatch):
     # cmd_serve writes upstream-url env vars DIRECTLY (os.environ), which
     # monkeypatch cannot track — pre-set them so teardown restores.
-    monkeypatch.setenv("LMW_UPSTREAM_URL", "")
-    monkeypatch.setenv("LTP_UPSTREAM_URL", "")
+    monkeypatch.setenv("PTP_UPSTREAM_URL", "")
+    monkeypatch.setenv("PTP_UPSTREAM_URL", "")
     calls: list[tuple[tuple, dict]] = []
 
     def fake_uvicorn_run(*a, **kw):
@@ -283,7 +283,7 @@ def test_cmd_serve_runs_uvicorn_once(state_env, monkeypatch):
     a, kw = calls[0]
     assert a[0] == "proxytool.main:app"
     assert kw["port"] == 8971
-    assert os.environ["LMW_UPSTREAM_URL"] == "http://127.0.0.1:8288"
+    assert os.environ["PTP_UPSTREAM_URL"] == "http://127.0.0.1:8288"
 
 
 def test_flag_or_env(monkeypatch):
@@ -304,27 +304,27 @@ def test_merge_env_into_process_env(monkeypatch):
         loop_nudge=3, loop_abort=9, upstream_url=None,
     )
     # Pre-set every key the helper writes directly: teardown restores them.
-    for var in ("LMW_UPSTREAM_API_KEY", "LMW_UPSTREAM_TIMEOUT",
-                "LMW_MODEL_MAP", "LMW_MODEL_MAP_FILE", "LMW_TRACE",
-                "LMW_LOOP_NUDGE", "LMW_LOOP_ABORT", "LTP_DEFAULT_BACKEND"):
+    for var in ("PTP_UPSTREAM_API_KEY", "PTP_UPSTREAM_TIMEOUT",
+                "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE", "PTP_TRACE",
+                "PTP_LOOP_NUDGE", "PTP_LOOP_ABORT", "PTP_DEFAULT_BACKEND"):
         monkeypatch.setenv(var, "")
     backends = {"b": routing.Backend(name="b", url="http://127.0.0.1:1",
                                      models=("m",), default=True)}
-    monkeypatch.delenv("LMW_LOOP_NUDGE", raising=False)
-    monkeypatch.delenv("LMW_LOOP_ABORT", raising=False)
+    monkeypatch.delenv("PTP_LOOP_NUDGE", raising=False)
+    monkeypatch.delenv("PTP_LOOP_ABORT", raising=False)
     cli._merge_env_into_process_env(args, backends)
-    assert os.environ["LMW_UPSTREAM_API_KEY"] == "sk"
-    assert os.environ["LMW_TRACE"] == "1"
-    assert os.environ["LMW_LOOP_NUDGE"] == "3"
-    assert os.environ["LMW_LOOP_ABORT"] == "9"
-    assert os.environ["LTP_DEFAULT_BACKEND"] == "b"
+    assert os.environ["PTP_UPSTREAM_API_KEY"] == "sk"
+    assert os.environ["PTP_TRACE"] == "1"
+    assert os.environ["PTP_LOOP_NUDGE"] == "3"
+    assert os.environ["PTP_LOOP_ABORT"] == "9"
+    assert os.environ["PTP_DEFAULT_BACKEND"] == "b"
 
 
 def test_pick_single_backend_url(monkeypatch):
     import proxytool.routing as routing
 
-    monkeypatch.delenv("LTP_UPSTREAM_URL", raising=False)
-    monkeypatch.delenv("LMW_UPSTREAM_URL", raising=False)
+    monkeypatch.delenv("PTP_UPSTREAM_URL", raising=False)
+    monkeypatch.delenv("PTP_UPSTREAM_URL", raising=False)
     args = types.SimpleNamespace(upstream_url=None)
     backends = {"b": routing.Backend(name="b", url="http://b:1", default=True)}
     assert cli._pick_single_backend_url(backends, args, "") == "http://b:1"

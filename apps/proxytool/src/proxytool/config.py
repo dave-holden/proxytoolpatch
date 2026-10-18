@@ -2,14 +2,14 @@
 
 Precedence for every setting:
 
-    CLI flag  >  environment (LTP_* / LMW_*)  >  config file  >  default
+    CLI flag  >  environment (PTP_*)  >  config file  >  default
 
-Config discovery: ``--config PATH``, then ``LTP_CONFIG``, then
+Config discovery: ``--config PATH``, then ``PTP_CONFIG``, then
 ``./proxytool.toml``, ``./.proxytool.toml``, and finally
 ``$XDG_CONFIG_HOME/proxytool/config.toml`` (default ``~/.config/...``).
 
 The config file is a *bridge*, not a parallel system: recognized values are
-exported as the same ``LTP_*`` env vars the rest of the stack already reads
+exported as the same ``PTP_*`` env vars the rest of the stack already reads
 (``settings``, routing, the daemonized child), but only when neither a CLI
 flag nor the environment already expressed them. That makes the CLI stay tiny
 (``proxytool start`` finds the file and goes) while flags/env keep winning.
@@ -19,14 +19,14 @@ Schema (all keys optional)::
     host = "127.0.0.1"
     port = 8180
     log_level = "info"            # debug | info | warning | error
-    default_backend = "mlx"
+    default_backend = "mlx"       # fallback route name for multi-routing
 
     [upstream]                    # single-backend setup (llama-swap etc.)
     url = "http://127.0.0.1:8080"
     timeout = 600
     api_key = "sk-..."
 
-    [routing.gguf]                # multi-backend table
+    [routing.gguf]                # multi-backend routing table
     url = "http://127.0.0.1:8181"
     models = ["qwen-gguf", "qwen"]
     default = true
@@ -55,6 +55,8 @@ from typing import Any, Literal
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from proxytool.routing import RESERVED_ROUTE_SUFFIXES
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # Python 3.10 — tomli is the stdlib tomllib backport
@@ -66,15 +68,15 @@ CWD_NAMES = ("proxytool.toml", ".proxytool.toml")
 def find_config(explicit: str | None = None) -> Path | None:
     """Resolve the active config file path, or None when none exists."""
     if explicit:
-        p = Path(explicit). expanduser()
+        p = Path(explicit).expanduser()
         if not p.is_file():
             raise ValueError(f"config file not found: {explicit}")
         return p
-    env = os.environ.get("LTP_CONFIG")
+    env = os.environ.get("PTP_CONFIG")
     if env:
         p = Path(env).expanduser()
         if not p.is_file():
-            raise ValueError(f"LTP_CONFIG points to a missing file: {env}")
+            raise ValueError(f"PTP_CONFIG points to a missing file: {env}")
         return p
     xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     cwd = Path.cwd()
@@ -215,6 +217,10 @@ def validate_config(data: dict[str, Any], label: str = "config") -> None:
                     continue
                 if not t.get("url"):
                     errors.append(f"routing.{name} needs at least a url")
+                if str(name).upper() in RESERVED_ROUTE_SUFFIXES:
+                    errors.append(
+                        f"routing.{name}: reserved route name "
+                        f"({'/'.join(s.lower() for s in RESERVED_ROUTE_SUFFIXES)})")
             defaults = [str(n) for n, t in routing.items()
                         if isinstance(t, dict) and t.get("default")]
             if len(defaults) > 1:
@@ -236,9 +242,8 @@ def _env_set(*names: str) -> bool:
 
 
 def _set_if_unset(env_key: str, value: str) -> bool:
-    """Set ``env_key`` unless it (or its legacy LMW_ twin) is already set."""
-    legacy = "LMW_" + env_key[len("LTP_"):]
-    if _env_set(env_key, legacy) or not value:
+    """Set ``env_key`` unless it is already set."""
+    if _env_set(env_key) or not value:
         return False
     os.environ[env_key] = value
     return True
@@ -255,21 +260,22 @@ def _flag_unset(value: Any) -> bool:
 def _env_backends_present() -> bool:
     """True when the env already declares a *named* routed backend.
 
-    ``LTP_UPSTREAM_URL`` (the standalone single-backend URL) and the DEFAULT/
-    _MODELS helpers are not named backends.
+    Settings-valued suffixes under the same namespace (``PTP_UPSTREAM_URL`` /
+    ``_DEFAULT`` / ``_API_KEY`` / ``_TIMEOUT``) are single-upstream settings,
+    not named backends.
     """
     for var in os.environ:
-        if not var.startswith("LTP_UPSTREAM_"):
+        if not var.startswith("PTP_UPSTREAM_"):
             continue
-        rest = var[len("LTP_UPSTREAM_"):]
-        if rest.endswith("_MODELS") or rest in ("URL", "DEFAULT"):
+        rest = var[len("PTP_UPSTREAM_"):]
+        if rest in RESERVED_ROUTE_SUFFIXES:
             continue
         return True
     return False
 
 
 def _bridge_routing(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
-    """[routing.<name>] + default_backend → LTP_UPSTREAM_* env."""
+    """[routing.<name>] + default_backend → PTP_UPSTREAM_* env."""
     flag_backends = list(getattr(args, "upstream", None) or [])
     if flag_backends or _env_backends_present():
         return
@@ -277,21 +283,21 @@ def _bridge_routing(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
         if not isinstance(table, dict) or not table.get("url"):
             raise ValueError(f"routing.{name} needs at least a url")
         upper = str(name).upper().replace("-", "_")
-        if _set_if_unset(f"LTP_UPSTREAM_{upper}", str(table["url"]).rstrip("/")):
-            applied.append(f"LTP_UPSTREAM_{upper}")
+        if _set_if_unset(f"PTP_UPSTREAM_{upper}", str(table["url"]).rstrip("/")):
+            applied.append(f"PTP_UPSTREAM_{upper}")
         models = table.get("models") or []
         if isinstance(models, str):
             models = [m.strip() for m in models.split(",") if m.strip()]
         if models:
             joined = ",".join(str(m) for m in models)
-            if _set_if_unset(f"LTP_UPSTREAM_{upper}_MODELS", joined):
-                applied.append(f"LTP_UPSTREAM_{upper}_MODELS")
+            if _set_if_unset(f"PTP_UPSTREAM_{upper}_MODELS", joined):
+                applied.append(f"PTP_UPSTREAM_{upper}_MODELS")
     flag_default = _flag("default_backend", args)
-    if flag_default is None and not _env_set("LTP_DEFAULT_BACKEND"):
+    if flag_default is None and not _env_set("PTP_DEFAULT_BACKEND"):
         cfg_default = cfg.get("default_backend")
         if cfg_default:
-            os.environ["LTP_DEFAULT_BACKEND"] = str(cfg_default)
-            applied.append("LTP_DEFAULT_BACKEND")
+            os.environ["PTP_DEFAULT_BACKEND"] = str(cfg_default)
+            applied.append("PTP_DEFAULT_BACKEND")
         else:
             # top-level default_backend unset → accept `default = true` on
             # exactly one [routing.*] entry (the llama-swap-style spelling).
@@ -302,30 +308,30 @@ def _bridge_routing(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
                     "default = true on more than one routing entry: "
                     + ", ".join(defaults))
             if defaults:
-                os.environ["LTP_DEFAULT_BACKEND"] = defaults[0]
-                applied.append("LTP_DEFAULT_BACKEND")
+                os.environ["PTP_DEFAULT_BACKEND"] = defaults[0]
+                applied.append("PTP_DEFAULT_BACKEND")
 
 
 def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
     """Top-level + [upstream] + [model_map] + [loopguard] + [trace] settings."""
     if _flag_unset(_flag("host", args)) and "host" in cfg and _set_if_unset(
-            "LTP_HOST", str(cfg["host"])):
-        applied.append("LTP_HOST")
+            "PTP_HOST", str(cfg["host"])):
+        applied.append("PTP_HOST")
     if _flag("port", args) is None and "port" in cfg and _set_if_unset(
-            "LTP_PORT", str(int(cfg["port"]))):
-        applied.append("LTP_PORT")
+            "PTP_PORT", str(int(cfg["port"]))):
+        applied.append("PTP_PORT")
     if _flag("log_level", args) is None and not _flag("quiet", args):
         raw = str(cfg.get("log_level", "") or "")
-        if raw and _set_if_unset("LTP_LOG_LEVEL", raw):
-            applied.append("LTP_LOG_LEVEL")
+        if raw and _set_if_unset("PTP_LOG_LEVEL", raw):
+            applied.append("PTP_LOG_LEVEL")
 
     up = cfg.get("upstream") or {}
     if _flag_unset(_flag("upstream_url", args)) and up.get("url") and _set_if_unset(
-            "LTP_UPSTREAM_URL", str(up["url"]).rstrip("/")):
-        applied.append("LTP_UPSTREAM_URL")
+            "PTP_UPSTREAM_URL", str(up["url"]).rstrip("/")):
+        applied.append("PTP_UPSTREAM_URL")
     for attr, key, envk in (
-        ("upstream_api_key", "api_key", "LTP_UPSTREAM_API_KEY"),
-        ("upstream_timeout", "timeout", "LTP_UPSTREAM_TIMEOUT"),
+        ("upstream_api_key", "api_key", "PTP_UPSTREAM_API_KEY"),
+        ("upstream_timeout", "timeout", "PTP_UPSTREAM_TIMEOUT"),
     ):
         if _flag_unset(_flag(attr, args)) and up.get(key) and _set_if_unset(
                 envk, str(up[key])):
@@ -339,13 +345,13 @@ def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None
             mm = json.dumps({str(k): str(v) for k, v in table.items()})
         elif up.get("model_map_file"):
             mm = "@file:" + str(up["model_map_file"])
-    if mm and _set_if_unset("LTP_MODEL_MAP", mm):
-        applied.append("LTP_MODEL_MAP")
+    if mm and _set_if_unset("PTP_MODEL_MAP", mm):
+        applied.append("PTP_MODEL_MAP")
 
     lg = cfg.get("loopguard") or {}
     for attr, key, envk in (
-        ("loop_nudge", "nudge", "LTP_LOOP_NUDGE"),
-        ("loop_abort", "abort", "LTP_LOOP_ABORT"),
+        ("loop_nudge", "nudge", "PTP_LOOP_NUDGE"),
+        ("loop_abort", "abort", "PTP_LOOP_ABORT"),
     ):
         if _flag(attr, args) is None and lg.get(key) is not None and _set_if_unset(
                 envk, str(int(lg[key]))):
@@ -353,11 +359,11 @@ def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None
 
     tr = cfg.get("trace") or {}
     if not _flag("trace", args) and tr.get("enabled") and _set_if_unset(
-            "LTP_TRACE", "1"):
-        applied.append("LTP_TRACE")
-    if tr.get("file") and not _env_set("LMW_TRACE_FILE"):
-        os.environ["LMW_TRACE_FILE"] = str(tr["file"])
-        applied.append("LMW_TRACE_FILE")
+            "PTP_TRACE", "1"):
+        applied.append("PTP_TRACE")
+    if tr.get("file") and not _env_set("PTP_TRACE_FILE"):
+        os.environ["PTP_TRACE_FILE"] = str(tr["file"])
+        applied.append("PTP_TRACE_FILE")
 
 
 def apply_config(args: Any, *, serve: bool,
@@ -383,22 +389,24 @@ def apply_config(args: Any, *, serve: bool,
 def config_help_line() -> str:
     """Short discovery summary for --help text."""
     home = Path.home() / ".config" / "proxytool" / "config.toml"
-    return (f"TOML config file (LTP_CONFIG; default search: ./proxytool.toml, "
+    return (f"TOML config file (PTP_CONFIG; default search: ./proxytool.toml, "
             f"./.proxytool.toml, {home})")
+
+
 # ── diagnostics (`proxytool config print|check`) ────────────────────────────
 
 _SEARCH_DETAIL = {
-    "LTP_HOST": "host",
-    "LTP_PORT": "port",
-    "LTP_LOG_LEVEL": "log_level",
-    "LTP_UPSTREAM_URL": "upstream.url",
-    "LTP_UPSTREAM_API_KEY": "upstream.api_key",
-    "LTP_UPSTREAM_TIMEOUT": "upstream.timeout",
-    "LTP_MODEL_MAP": "model_map",
-    "LTP_LOOP_NUDGE": "loopguard.nudge",
-    "LTP_LOOP_ABORT": "loopguard.abort",
-    "LTP_TRACE": "trace.enabled",
-    "LMW_TRACE_FILE": "trace.file",
+    "PTP_HOST": "host",
+    "PTP_PORT": "port",
+    "PTP_LOG_LEVEL": "log_level",
+    "PTP_UPSTREAM_URL": "upstream.url",
+    "PTP_UPSTREAM_API_KEY": "upstream.api_key",
+    "PTP_UPSTREAM_TIMEOUT": "upstream.timeout",
+    "PTP_MODEL_MAP": "model_map",
+    "PTP_LOOP_NUDGE": "loopguard.nudge",
+    "PTP_LOOP_ABORT": "loopguard.abort",
+    "PTP_TRACE": "trace.enabled",
+    "PTP_TRACE_FILE": "trace.file",
 }
 
 
@@ -406,7 +414,7 @@ def _search_candidates(explicit: str | None) -> list[Path]:
     """The paths find_config consults, in order (for diagnostic display)."""
     if explicit:
         return [Path(explicit).expanduser()]
-    env = os.environ.get("LTP_CONFIG")
+    env = os.environ.get("PTP_CONFIG")
     if env:
         return [Path(env).expanduser()]
     xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
@@ -418,10 +426,10 @@ def _detail_for(key: str) -> str:
     """Which config-file key would supply ``env key`` (for sourced rows)."""
     if key in _SEARCH_DETAIL:
         return _SEARCH_DETAIL[key]
-    m = re.fullmatch(r"LTP_UPSTREAM_([A-Z0-9_]+)_MODELS", key)
+    m = re.fullmatch(r"PTP_UPSTREAM_([A-Z0-9_]+)_MODELS", key)
     if m:
         return f"routing.{m.group(1).lower()}.models"
-    m = re.fullmatch(r"LTP_UPSTREAM_([A-Z0-9_]+)", key)
+    m = re.fullmatch(r"PTP_UPSTREAM_([A-Z0-9_]+)", key)
     if m:
         return f"routing.{m.group(1).lower()}.url"
     return ""
@@ -431,9 +439,9 @@ def _relevant_env_keys(keys: Any) -> list[str]:
     """Env vars the bridge could read or fill — diagnostic row candidates."""
     out = []
     for key in keys:
-        if key == "LTP_CONFIG":
+        if key == "PTP_CONFIG":
             continue  # it *selects* the file; shown in the discovery block
-        if key.startswith(("LTP_", "LMW_")):
+        if key.startswith("PTP_"):
             out.append(key)
     return sorted(out)
 
@@ -444,9 +452,9 @@ def describe_config(args: Any | None, *, routing: bool = True,
 
     Returns a JSON-friendly dict with the discovered file, the candidates
     consulted, validation errors when any, and one row per relevant env var
-    (LTP_/LMW_) with its value and where it would come from at serve/start
-    time: ``config file`` (bridged now) or ``env (pre-existing)`` (already
-    set, so the bridge would leave it). Flags are intentionally not shown —
+    (PTP_*) with its value and where it would come from at serve/start time:
+    ``config file`` (bridged now) or ``env (pre-existing)`` (already set, so
+    the bridge would leave it). Flags are intentionally not shown —
     precedence is CLI flag > env > config file > default, and this
     subcommand takes no flags.
     """

@@ -84,7 +84,7 @@ the app — workspace `uv sync`, `pip install proxytool`, or
 `uv tool install proxytool` — puts it on your PATH. Full CLI reference:
 [`apps/proxytool/README.md`](apps/proxytool/README.md).
 
-**What it is, one line:** `proxytool` is a FastAPI middleware + CLI that sits
+**What it is, one line:** `proxytool` is a FastAPI proxytool + CLI that sits
 in front of standard OpenAI-compatible local model servers, rewrites handler
 aliases, repairs garbled tool calls in-flight via the `toolpatch` library,
 and aborts asking-loops via LoopGuard.
@@ -115,8 +115,8 @@ llama-server --host 127.0.0.1 --port 8181 --jinja \
 # or mlx_lm.server
 python -m mlx_lm.server --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit --port 8181
 
-# optional: tell the repair layer which server dialect it is talking to
-export LMW_BACKEND=gguf   # gguf | mlx | omlx | fake  (repair hint only)
+# (no backend env needed: proxytool auto-detects the dialect per request
+#  from the model id — an mlx model id gets tool_choice stripped upstream)
 ```
 
 ### 2 · Start llama-swap (scenario B: llama-swap owns the backends)
@@ -130,8 +130,8 @@ proxytool serve --upstream-url http://127.0.0.1:8080 \
   --model-map '{"qwen-gguf":"<real llama-swap model id>"}'
 ```
 
-Equivalent env: `LTP_UPSTREAM_URL=http://127.0.0.1:8080`,
-`LTP_MODEL_MAP='{…}'`. See `examples/llama-swap/config.yml` for a working
+Equivalent env: `PTP_UPSTREAM_URL=http://127.0.0.1:8080`,
+`PTP_MODEL_MAP='{…}'`. See `examples/llama-swap/config.yml` for a working
 upstream file.
 
 Then start proxytool itself — foreground, or daemonized with its own
@@ -159,7 +159,7 @@ mkdir -p ~/.pi/agent && cp examples/pi/models.json ~/.pi/agent/models.json
 pi --provider proxytool --model qwen-mlx -p "list the files in ."
 
 # smoke-test without any agent
-LMW_TRACE=1 uv run uvicorn proxytool.main:app --port 8180   # dev server
+PTP_TRACE=1 uv run uvicorn proxytool.main:app --port 8180   # dev server
 ```
 
 The configs point their baseURL at `http://127.0.0.1:8180/v1` (proxytool).
@@ -196,7 +196,7 @@ interpreter in a throwaway uv env — and CI runs those nox sessions directly,
 so `noxfile.py` is the single source of truth for what “checked” means.
 `uv run nox` locally is exactly what `test-matrix` in CI tests.
 
-Live model / real-client tests are opt-in (`LMW_LIVE=1`) and auto-skip —
+Live model / real-client tests are opt-in (`PTP_LIVE=1`) and auto-skip —
 see [`apps/proxytool/README.md`](apps/proxytool/README.md#tests--checks).
 
 Matrix / hooks / CI / PR setup:

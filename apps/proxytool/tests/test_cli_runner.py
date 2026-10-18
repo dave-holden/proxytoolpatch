@@ -10,27 +10,27 @@ from proxytool.routing import Backend
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    # Strip any host-side LMW_/LTP_ leakage so tests only see what they set.
+    # Strip any host-side PTP_/PTP_ leakage so tests only see what they set.
     for k in list(os.environ):
-        if k.startswith(("LTP_", "LMW_")):
+        if k.startswith(("PTP_", "PTP_")):
             monkeypatch.delenv(k, raising=False)
     yield
 
 
 class TestFlagOrEnv:
     def test_flag_wins_over_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("LTP_UPSTREAM_URL", "http://env:1")
+        monkeypatch.setenv("PTP_UPSTREAM_URL", "http://env:1")
         args = type("A", (), {"upstream_url": "http://flag:2"})()
-        assert cli_mod._flag_or_env(args, ["LTP_UPSTREAM_URL"], "upstream_url") == "http://flag:2"
+        assert cli_mod._flag_or_env(args, ["PTP_UPSTREAM_URL"], "upstream_url") == "http://flag:2"
 
     def test_env_used_when_flag_unset(self, monkeypatch) -> None:
-        monkeypatch.setenv("LTP_UPSTREAM_URL", "http://env:1")
+        monkeypatch.setenv("PTP_UPSTREAM_URL", "http://env:1")
         args = type("A", (), {"upstream_url": None})()
-        assert cli_mod._flag_or_env(args, ["LTP_UPSTREAM_URL"], "upstream_url") == "http://env:1"
+        assert cli_mod._flag_or_env(args, ["PTP_UPSTREAM_URL"], "upstream_url") == "http://env:1"
 
     def test_default_empty_when_neither(self) -> None:
         args = type("A", (), {"upstream_url": None})()
-        assert cli_mod._flag_or_env(args, ["LTP_UPSTREAM_URL"], "upstream_url") == ""
+        assert cli_mod._flag_or_env(args, ["PTP_UPSTREAM_URL"], "upstream_url") == ""
 
 
 class TestPickSingleBackendUrl:
@@ -67,21 +67,21 @@ class TestMergeEnv:
             },
         )()
         cli_mod._merge_env_into_process_env(args, {})
-        assert os.environ["LMW_UPSTREAM_API_KEY"] == "sk-x"
-        assert os.environ["LMW_UPSTREAM_TIMEOUT"] == "42.0"
-        assert os.environ["LMW_MODEL_MAP"] == '{"a": "b"}'
-        assert os.environ["LMW_TRACE"] == "1"
-        assert os.environ["LMW_LOOP_NUDGE"] == "2"
-        assert os.environ["LMW_LOOP_ABORT"] == "4"
+        assert os.environ["PTP_UPSTREAM_API_KEY"] == "sk-x"
+        assert os.environ["PTP_UPSTREAM_TIMEOUT"] == "42.0"
+        assert os.environ["PTP_MODEL_MAP"] == '{"a": "b"}'
+        assert os.environ["PTP_TRACE"] == "1"
+        assert os.environ["PTP_LOOP_NUDGE"] == "2"
+        assert os.environ["PTP_LOOP_ABORT"] == "4"
 
     def test_existing_env_not_clobbered(self, monkeypatch, clean_env) -> None:
-        monkeypatch.setenv("LMW_TRACE", "1")
+        monkeypatch.setenv("PTP_TRACE", "1")
         args = type("A", (), {"upstream_api_key": None,
                               "upstream_timeout": None, "model_map": None,
                               "model_map_file": None, "trace": True,
                               "loop_nudge": None, "loop_abort": None})()
         cli_mod._merge_env_into_process_env(args, {})
-        assert os.environ["LMW_TRACE"] == "1"  # not clobbered to "1" again
+        assert os.environ["PTP_TRACE"] == "1"  # not clobbered to "1" again
 
 
 class TestPickSingleBackendUrlEnvFallback:

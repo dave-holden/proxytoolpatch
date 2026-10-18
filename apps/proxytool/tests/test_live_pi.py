@@ -1,15 +1,15 @@
 """E2E test through **pi** (pi.dev) — the second real agent client.
 
-Opt-in via ``LMW_LIVE=1`` (also auto-skips when the ``pi`` CLI is not on PATH
-or no live middleware is reachable). Requires a running rig:
+Opt-in via ``PTP_LIVE=1`` (also auto-skips when the ``pi`` CLI is not on PATH
+or no live proxytool is reachable). Requires a running rig:
 
     ./scripts/dev-rig.sh mlx mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
 
-    LMW_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q
+    PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q
 
 pi is configured via ``PI_MODELS_FILE`` (an isolated temp models.json) so the
 test never touches ``~/.pi/agent/models.json``. It registers an
-``openai-completions`` provider at the middleware and runs ``pi -p <prompt>``
+``openai-completions`` provider at the proxytool and runs ``pi -p <prompt>``
 (print mode, one-shot), then asserts:
 
 - the run completed without the client choking on the repaired payload
@@ -32,9 +32,9 @@ import pytest
 
 OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()
 
-MIDDLEWARE = os.environ.get("LMW_MIDDLEWARE_URL", "http://127.0.0.1:8180")
-PI_BIN = os.environ.get("LMW_PI_BIN", "pi")
-MODEL = os.environ.get("LMW_LIVE_MODEL_PI", "qwen-mlx")
+PROXY = os.environ.get("PTP_PROXY_URL", "http://127.0.0.1:8180")
+PI_BIN = os.environ.get("PTP_PI_BIN", "pi")
+MODEL = os.environ.get("PTP_LIVE_MODEL_PI", "qwen-mlx")
 
 PROMPT = (
     "Use the list_dir tool to show me the contents of the current directory. "
@@ -46,27 +46,27 @@ def _pi_available() -> bool:
     return shutil.which(PI_BIN) is not None
 
 
-def _middleware_live() -> bool:
+def _proxytool_live() -> bool:
     try:
-        return httpx.get(f"{MIDDLEWARE}/health", timeout=2.0).status_code == 200
+        return httpx.get(f"{PROXY}/health", timeout=2.0).status_code == 200
     except httpx.HTTPError:
         return False
 
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("LMW_LIVE") != "1"
+    os.environ.get("PTP_LIVE") != "1"
     or not _pi_available()
-    or not _middleware_live(),
-    reason="LMW_LIVE=1 not set, pi CLI missing, or middleware not running",
+    or not _proxytool_live(),
+    reason="PTP_LIVE=1 not set, pi CLI missing, or proxytool not running",
 )
 
 
 def _make_pi_env(workdir: Path) -> tuple[dict[str, str], Path]:
-    """Isolated pi config: custom provider -> middleware, nothing else."""
+    """Isolated pi config: custom provider -> proxytool, nothing else."""
     cfg = {
         "providers": {
             "proxytool-mw-test": {
-                "baseUrl": f"{MIDDLEWARE}/v1",
+                "baseUrl": f"{PROXY}/v1",
                 "api": "openai-completions",
                 "apiKey": "not-needed",
                 "compat": {
@@ -76,7 +76,7 @@ def _make_pi_env(workdir: Path) -> tuple[dict[str, str], Path]:
                 "models": [
                     {
                         "id": MODEL,
-                        "name": "Qwen via llama-middleware (test)",
+                        "name": "Qwen via llama-proxytool (test)",
                         "input": ["text"],
                         "contextWindow": 16384,
                         "maxTokens": 8192,

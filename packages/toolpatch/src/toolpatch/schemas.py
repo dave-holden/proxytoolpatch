@@ -1,4 +1,4 @@
-"""OpenAI-compatible Pydantic schemas shared by the middleware pipeline."""
+"""OpenAI-compatible Pydantic schemas shared by the proxytool pipeline."""
 
 from __future__ import annotations
 

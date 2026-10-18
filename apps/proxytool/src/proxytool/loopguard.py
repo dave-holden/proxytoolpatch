@@ -2,7 +2,7 @@
 
 When a client re-prompts with a byte-identical message history (after
 sanitization), llama-server tends to replay the same continuation — a loop.
-The middleware counters this in two steps:
+The proxytool counters this in two steps:
 
 1. **nudge** after ``nudge_after`` identical consecutive requests: append a
    short user message asking the model to finish the turn and stop.
@@ -34,7 +34,7 @@ NUDGE_TEXT = (
 ABORT_TEXT = (
     "**LoopGuard: request aborted after {count} identical attempts.**\n\n"
     "The model kept producing the same reply for the same prompt, so the "
-    "middleware stopped forwarding to avoid burning tokens. To continue:\n"
+    "proxytool stopped forwarding to avoid burning tokens. To continue:\n"
     "- Rephrase your message (even slightly), or\n"
     "- Start a new session.\n\n"
     "This is a safety cut-off, not a model answer."

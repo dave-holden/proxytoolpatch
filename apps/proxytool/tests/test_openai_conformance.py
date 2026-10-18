@@ -1,7 +1,7 @@
-"""OpenAI API conformance contract tests for the middleware surface.
+"""OpenAI API conformance contract tests for the proxytool surface.
 
 These pin the *protocol* contract an OpenAI-compatible client can rely on —
-independent of repair logic — against a mocked upstream. The middleware must
+independent of repair logic — against a mocked upstream. The proxytool must
 either mirror the upstream's OpenAI shapes verbatim or emit equally valid
 substitutes.
 

@@ -22,11 +22,11 @@ def _upstream_reply(model: str) -> dict:
 
 @pytest.fixture()
 def routed_client(mock_upstream, respx_mock_b, monkeypatch):
-    """App with a two-backend router registered via LTP_UPSTREAM_* env."""
-    monkeypatch.setenv("LTP_UPSTREAM_GGUF", BE_A)
-    monkeypatch.setenv("LTP_UPSTREAM_MLX", BE_B)
-    monkeypatch.setenv("LTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
-    monkeypatch.setenv("LTP_DEFAULT_BACKEND", "mlx")
+    """App with a two-backend router registered via PTP_UPSTREAM_* env."""
+    monkeypatch.setenv("PTP_UPSTREAM_GGUF", BE_A)
+    monkeypatch.setenv("PTP_UPSTREAM_MLX", BE_B)
+    monkeypatch.setenv("PTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
+    monkeypatch.setenv("PTP_DEFAULT_BACKEND", "mlx")
     # _ROUTER caches at module level: skip the cache per test.
     import proxytool.main as main_mod
 
@@ -53,10 +53,10 @@ def _reset_router():
 
 
 def test_model_list_routes_to_second_backend(respx_mock_b, monkeypatch):
-    monkeypatch.setenv("LTP_UPSTREAM_GGUF", BE_A)
-    monkeypatch.setenv("LTP_UPSTREAM_MLX", BE_B)
-    monkeypatch.setenv("LTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
-    monkeypatch.setenv("LTP_DEFAULT_BACKEND", "mlx")
+    monkeypatch.setenv("PTP_UPSTREAM_GGUF", BE_A)
+    monkeypatch.setenv("PTP_UPSTREAM_MLX", BE_B)
+    monkeypatch.setenv("PTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
+    monkeypatch.setenv("PTP_DEFAULT_BACKEND", "mlx")
     _reset_router()
 
     respx_mock_b.post("/v1/chat/completions").respond(
@@ -85,10 +85,10 @@ def test_model_list_routes_to_second_backend(respx_mock_b, monkeypatch):
 
 
 def test_default_backend_used_when_no_model_match(respx_mock_b, monkeypatch, mock_upstream):
-    monkeypatch.setenv("LTP_UPSTREAM_GGUF", BE_A)
-    monkeypatch.setenv("LTP_UPSTREAM_MLX", BE_B)
-    monkeypatch.setenv("LTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
-    monkeypatch.setenv("LTP_DEFAULT_BACKEND", "mlx")
+    monkeypatch.setenv("PTP_UPSTREAM_GGUF", BE_A)
+    monkeypatch.setenv("PTP_UPSTREAM_MLX", BE_B)
+    monkeypatch.setenv("PTP_UPSTREAM_MLX_MODELS", "qwen-mlx")
+    monkeypatch.setenv("PTP_DEFAULT_BACKEND", "mlx")
     _reset_router()
     from fastapi.testclient import TestClient
 
@@ -111,7 +111,7 @@ def test_default_backend_used_when_no_model_match(respx_mock_b, monkeypatch, moc
 
 def test_single_upstream_env_keeps_single_conduit(monkeypatch, mock_upstream):
     """One declared backend → no router built; legacy single-conduit path."""
-    monkeypatch.setenv("LMW_UPSTREAM_URL", BE_A)
+    monkeypatch.setenv("PTP_UPSTREAM_URL", BE_A)
     _reset_router()
     from proxytool.main import get_router
 

@@ -1,4 +1,4 @@
-"""proxytool: FastAPI middleware conduit standing between agent clients and Qwen servers."""
+"""proxytool: FastAPI proxy standing between agent clients and local model servers."""
 
 import logging as _logging
 from importlib.metadata import PackageNotFoundError
@@ -15,8 +15,7 @@ def configure_logging(*, level: str | None = None, quiet: bool = False) -> None:
 
     ``level`` selects the app logger threshold from the standard tiers
     ``debug``, ``info``, ``warning``, or ``error``. When omitted the
-    environment variable ``LTP_LOG_LEVEL`` (or its legacy ``LMW_LOG_LEVEL``
-    spelling) is used, falling back to ``info``.
+    environment variable ``PTP_LOG_LEVEL`` is used, falling back to ``info``.
 
     ``quiet`` suppresses non-error app output to stderr by raising the app
     logger threshold to ``error``.
@@ -42,7 +41,7 @@ def configure_logging(*, level: str | None = None, quiet: bool = False) -> None:
     elif level:
         effective = level
     else:
-        effective = os.environ.get("LTP_LOG_LEVEL") or os.environ.get("LMW_LOG_LEVEL") or "info"
+        effective = os.environ.get("PTP_LOG_LEVEL", "info")
 
     _level = _resolve_level(effective)
     _app = _logging.getLogger("proxytool")

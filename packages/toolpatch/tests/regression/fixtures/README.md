@@ -6,7 +6,7 @@ Each `*.json` file is one **golden pair**: (upstream response) → (expected rep
 
 Whenever the real Qwen/GGUF/MLX upstream produces a *new* kind of misformatting
 (a leak shape the extractor mishandles, new JSON damage, etc.), capture the raw
-upstream `content` (or SSE chunks) via `LMW_TRACE=1` logs and add it here.
+upstream `content` (or SSE chunks) via `PTP_TRACE=1` logs and add it here.
 
 ## Format
 

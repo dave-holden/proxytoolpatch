@@ -1,4 +1,5 @@
-"""FastAPI middleware: sits between the agent client and the Qwen server.
+"""FastAPI application: proxytool sits between the agent client and the upstream
+model server (llama-server / mlx_lm.server / llama-swap / any OpenAI dialect).
 
 - POST /v1/chat/completions : sanitize the outbound request, repair leaked
   tool calls in the inbound response (both streaming SSE and non-streaming).
@@ -54,21 +55,21 @@ loop_guard = LoopGuard(
     nudge_after=settings.loop_nudge,
     abort_after=settings.loop_abort,
 )
-app = FastAPI(title="llama-middleware proxy")
+app = FastAPI(title="proxytool")
 
 if _can_emit(_log):
-    _log.debug("middleware initialized: upstream=%s backend=%s",
-               settings.upstream_url, settings.backend)
+    _log.debug("proxytool initialized: upstream=%s",
+               settings.upstream_url)
 
 PASS_HEADERS_OUT = ("content-type", "x-request-id")
 
 _UPSTREAM_MODELS: list[str] | None = None  # lazily discovered, cached
 
 # ---- optional multi-backend routing -----------------------------------------
-# When LTP_UPSTREAM_<NAME> vars are present, requests are routed per-model
+# When PTP_UPSTREAM_<NAME> vars are present, requests are routed per-model
 # through BackendRouter; each routed backend gets its own conduit. With no
-# LTP_UPSTREAM_* vars, everything flows through the single `conduit` above
-# (LMW_UPSTREAM_URL), preserving single-backend behavior byte-for-byte.
+# PTP_UPSTREAM_* vars, everything flows through the single `conduit` above
+# (PTP_UPSTREAM_URL), preserving single-backend behavior byte-for-byte.
 
 from proxytool.routing import BackendRouter, backends_from_env  # noqa: E402
 
@@ -77,7 +78,7 @@ _CONDUITS: dict[str, UpstreamConduit] = {}
 
 
 def get_router() -> BackendRouter | None:
-    """Build the router from env once (LTP_UPSTREAM_*); None = single-backend."""
+    """Build the router from env once (PTP_UPSTREAM_*); None = single-backend."""
     global _ROUTER
     if _ROUTER is None:
         declared = backends_from_env()
@@ -93,7 +94,7 @@ def get_router() -> BackendRouter | None:
                     api_key=settings.upstream_api_key,
                 )
             _ROUTER = router
-            trace.log("MW.ROUTER", {n: b.url for n, b in declared.items()})
+            trace.log("PT.ROUTER", {n: b.url for n, b in declared.items()})
     return _ROUTER if _ROUTER.backends else None
 
 
@@ -168,7 +169,7 @@ def _sse_line_event(line_bytes: bytes) -> tuple[str, dict[str, Any] | None]:
 async def _resolve_model(model: str) -> str:
     """Map a client-facing model id to one the upstream actually serves.
 
-    Order: LMW_MODEL_MAP → upstream /v1/models membership → single loaded
+    Order: PTP_MODEL_MAP → upstream /v1/models membership → single loaded
     model. mlx_lm.server resolves unknown model ids against HF (401/404
     "Repository Not Found"), so an unmapped alias must never be forwarded
     raw when the real id is discoverable.
@@ -184,7 +185,7 @@ async def _resolve_model(model: str) -> str:
             _UPSTREAM_MODELS = [m.get("id", "") for m in data if isinstance(m, dict)]
         except Exception:
             _UPSTREAM_MODELS = []  # unreachable/mock — keep alias as-is
-        trace.log("MW.MODELS", _UPSTREAM_MODELS)
+        trace.log("PT.MODELS", _UPSTREAM_MODELS)
     known = [m for m in _UPSTREAM_MODELS if m]
     if model in known:
         return model
@@ -227,16 +228,19 @@ async def health() -> dict[str, str]:
 
 
 def _resolve_backend(payload: dict[str, Any]) -> Backend:
-    """Backend decision: payload heuristics first, else LMW_BACKEND env (gguf default).
+    """Dialect auto-detection, decided per request from the payload itself.
 
-    A model id mentioning mlx, or an explicit mlx-community/HF repo id,
-    implies mlx; anything else defers to settings.backend.
+    Routing stays llama-swap-style (the request's ``model`` field selects the
+    upstream); the only dialect split left is request-side: mlx servers don't
+    support ``tool_choice``, gguf/llama.cpp dialects do. A model id mentioning
+    mlx, or an explicit mlx-community/HF repo id, implies mlx; anything else
+    is treated as gguf-style. No env knob — proxies that need a different
+    dropdown use the repair hints in the toolpatch library instead.
     """
     model = str(payload.get("model") or "")
     if "mlx" in model.lower() or model.startswith("mlx-community/"):
         return "mlx"
-    resolved: Backend = "mlx" if settings.backend == "mlx" else "gguf"
-    return resolved
+    return "gguf"
 
 
 @app.post("/v1/chat/completions")
@@ -247,17 +251,17 @@ async def chat_completions(request: Request):
     except json.JSONDecodeError:
         return JSONResponse({"error": "invalid JSON body"}, status_code=400)
 
-    trace.log("CLIENT->MW", payload)
+    trace.log("CLIENT->PT", payload)
     # Route to a multi-backend upstream by the client's model id (no-op in
     # single-backend mode). Routing happens before sanitization because the
-    # sanitized payload's model may have been remapped by LMW_MODEL_MAP.
+    # sanitized payload's model may have been remapped by PTP_MODEL_MAP.
     chat_conduit = conduit
     router = get_router()
     if router is not None:
         client_model = str(payload.get("model") or "")
         decision = router.route(client_model)
         chat_conduit = conduit_for(decision.backend.name)
-        trace.log("MW.ROUTE", {"model": client_model,
+        trace.log("PT.ROUTE", {"model": client_model,
                                "backend": decision.backend.name,
                                "matched_by": decision.matched_by})
     backend = _resolve_backend(payload)
@@ -271,13 +275,13 @@ async def chat_completions(request: Request):
     model = str(payload.get("model") or "qwen")
     payload["model"] = await _resolve_model(model)
     if notes:
-        trace.log("MW.NOTES", notes)
-    trace.log("MW->UPSTREAM", payload)
+        trace.log("PT.NOTES", notes)
+    trace.log("PT->UPSTREAM", payload)
 
     # LoopGuard: identical consecutive prompts make llama-server replay the
     # same continuation forever. Nudge the model, then cut the loop off.
     decision = loop_guard.check(LoopGuard.request_key(payload))
-    trace.log("MW.GUARD", {"action": decision.action, "count": decision.count})
+    trace.log("PT.GUARD", {"action": decision.action, "count": decision.count})
     if decision.action == "abort":
         return _loop_guard_abort(decision.count, stream=bool(payload.get("stream")))
     if decision.action == "nudge":
@@ -285,7 +289,7 @@ async def chat_completions(request: Request):
             *payload["messages"],
             {"role": "user", "content": NUDGE_TEXT},
         ]
-        trace.log("MW->UPSTREAM", payload)
+        trace.log("PT->UPSTREAM", payload)
 
     if payload.get("stream"):
         return await _streaming(
@@ -306,7 +310,7 @@ async def _non_streaming(payload: dict[str, Any],
         "/v1/chat/completions", payload, headers=client_headers
     )
     if upstream.status_code >= 400:
-        trace.log("UPSTREAM->MW", {"error": upstream.text[:500]})
+        trace.log("UPSTREAM->PT", {"error": upstream.text[:500]})
         return JSONResponse(
             {"error": {"message": f"upstream error (HTTP {upstream.status_code}): "
                        f"{upstream.text[:500]}",
@@ -319,10 +323,10 @@ async def _non_streaming(payload: dict[str, Any],
     except (json.JSONDecodeError, UnicodeDecodeError):
         return _as_response(upstream, upstream.content)
 
-    trace.log("UPSTREAM->MW", data)
+    trace.log("UPSTREAM->PT", data)
     tool_names = _request_tool_names(payload)
     _repair_response(data, tool_names)
-    trace.log("MW->CLIENT", data)
+    trace.log("PT->CLIENT", data)
     return JSONResponse(content=data, status_code=upstream.status_code)
 
 

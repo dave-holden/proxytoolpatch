@@ -6,7 +6,7 @@ it belongs and what to edit.
 
 | File | What | Where it goes |
 |---|---|---|
-| [`proxytool/proxytool.toml`](proxytool/proxytool.toml) | The middleware's own config: server bind, upstream, routing, model map, LoopGuard, tracing | `~/.config/proxytool/config.toml` or `./proxytool.toml` next to where you run it |
+| [`proxytool/proxytool.toml`](proxytool/proxytool.toml) | The proxytool's own config: server bind, upstream, routing, model map, LoopGuard, tracing | `~/.config/proxytool/config.toml` or `./proxytool.toml` next to where you run it |
 | [`opencode-gguf.jsonc`](opencode-gguf.jsonc) | opencode client wired to `proxytool/qwen-gguf` (llama-server upstream) | `OPENCODE_CONFIG=./examples/opencode-gguf.jsonc` |
 | [`opencode-mlx.jsonc`](opencode-mlx.jsonc) | opencode client wired to `proxytool/qwen-mlx` (mlx_lm.server upstream) | `OPENCODE_CONFIG=./examples/opencode-mlx.jsonc` |
 | [`pi/models.json`](pi/models.json) | pi client provider + two model aliases through the proxy | `~/.pi/agent/models.json` (or `PI_MODELS_FILE`) |

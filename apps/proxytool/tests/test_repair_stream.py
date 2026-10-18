@@ -161,12 +161,12 @@ def test_stream_upstream_error_becomes_clean_sse_finish(client, mock_upstream):
 
 
 def test_mlx_backend_strips_tool_choice_and_maps_model(client, monkeypatch):
-    """LMW_BACKEND=mlx + alias map: tool_choice dropped, model remapped upward."""
+    """Dialect is auto-detected per request: an mlx model alias → tool_choice
+    dropped upstream, and PTP_MODEL_MAP remaps the alias upward."""
     import importlib
 
-    monkeypatch.setenv("LMW_BACKEND", "mlx")
     monkeypatch.setenv(
-        "LMW_MODEL_MAP",
+        "PTP_MODEL_MAP",
         '{"qwen-mlx": "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"}',
     )
     from proxytool import settings as settings_mod
