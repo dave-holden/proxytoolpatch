@@ -1,6 +1,6 @@
 [project]
 name = "toolpatch"
-version = "0.3.0"
+version = "0.3.1"
 description = "LLM tool-calling protocol repairer (pure logic, offline-testable)"
 readme = "README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
