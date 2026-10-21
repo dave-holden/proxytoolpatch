@@ -1,25 +1,75 @@
 name: publish toolpatch + proxytool
 
+# Three tag shapes are accepted:
+#   vX.Y.Z            release both packages (legacy combined release)
+#   toolpatch-vX.Y.Z  release toolpatch only
+#   proxytool-vX.Y.Z  release proxytool only
+# A per-package tag must match the version declared in that package's
+# pyproject.toml; the `prepare` job fails the run otherwise.
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*", "toolpatch-v*", "proxytool-v*"]
 
 jobs:
   tests-gate:
     uses: ./.github/workflows/test.yml   # must declare `on: workflow_call`
 
-  build:
-    needs: tests-gate
+  prepare:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      packages: ${{ steps.resolve.outputs.packages }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: resolve
+        name: resolve packages + version from tag
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF_NAME}"
+          case "$ref" in
+            toolpatch-v*) packages="toolpatch"; version="${ref#toolpatch-v}" ;;
+            proxytool-v*) packages="proxytool"; version="${ref#proxytool-v}" ;;
+            v*)           packages="toolpatch proxytool"; version="${ref#v}" ;;
+            *) echo "::error::unsupported tag '$ref'"; exit 1 ;;
+          esac
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$ref' does not carry a PEP 440 version"; exit 1
+          fi
+          for pkg in $packages; do
+            case "$pkg" in
+              toolpatch) pyproject="packages/toolpatch/pyproject.toml" ;;
+              proxytool) pyproject="apps/proxytool/pyproject.toml" ;;
+            esac
+            declared=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$pyproject" | head -n1)
+            if [ "$declared" != "$version" ]; then
+              echo "::error::tag '$ref' is $version but $pyproject declares $declared"
+              exit 1
+            fi
+          done
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publishing $packages at $version"
+
+  build:
+    needs: [tests-gate, prepare]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PACKAGES: ${{ needs.prepare.outputs.packages }}
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.13"
-      - run: uv build --package toolpatch --out-dir dist/toolpatch
-      - run: uv build --package proxytool --out-dir dist/proxytool
+      - name: build tagged package(s)
+        run: |
+          set -euo pipefail
+          for pkg in $PACKAGES; do
+            uv build --package "$pkg" --out-dir "dist/$pkg"
+          done
       - uses: actions/upload-artifact@v5
         with:
           name: dist
@@ -27,13 +77,16 @@ jobs:
           if-no-files-found: error
 
   publish-testpypi:
-    needs: build
+    needs: [build, prepare]
     runs-on: ubuntu-latest
     environment:
       name: testpypi
       url: https://test.pypi.org/project/proxytool/
     permissions:
       id-token: write
+    env:
+      PACKAGES: ${{ needs.prepare.outputs.packages }}
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - uses: actions/download-artifact@v5
@@ -42,42 +95,56 @@ jobs:
           path: dist/
       - name: publish to testpypi
         run: |
-          for pkg in toolpatch proxytool; do
+          set -euo pipefail
+          for pkg in $PACKAGES; do
             uv publish \
               --trusted-publishing always \
               --publish-url https://test.pypi.org/legacy/ \
               --check-url https://test.pypi.org/simple/ \
-              dist/$pkg/*
+              "dist/$pkg"/*
           done
       - name: smoke-test from testpypi
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          set -euo pipefail
           cd /tmp
           uv venv smoke
-          # Install ONLY our two wheels from testpypi (--no-deps): resolving
+          # Install ONLY the tagged wheels from testpypi (--no-deps): resolving
           # names across indexes is unsafe there — real-PyPI names beat
           # testpypi-only versions under first-index, and testpypi squatters
           # (e.g. a fake fastapi 1.0 that fails to build) win under
           # unsafe-best-match. Runtime deps come from real PyPI instead.
-          for i in 1 2 3 4 5; do
-            uv pip install --python smoke/bin/python --refresh \
-              --no-deps \
-              --index-url https://test.pypi.org/simple/ \
-              "toolpatch==$VERSION" "proxytool==$VERSION" && break
-            sleep 15
+          for pkg in $PACKAGES; do
+            for i in 1 2 3 4 5; do
+              uv pip install --python smoke/bin/python --refresh \
+                --no-deps \
+                --index-url https://test.pypi.org/simple/ \
+                "$pkg==$VERSION" && break
+              sleep 15
+            done
           done
+          case " $PACKAGES " in
+            *" toolpatch "*) ;;
+            *)
+              # proxytool-only tag: its toolpatch dependency came from an
+              # earlier toolpatch tag (unpinned in pyproject, so take latest).
+              uv pip install --python smoke/bin/python \
+                --index-url https://pypi.org/simple/ toolpatch
+              ;;
+          esac
           # derive the runtime requirements from the installed wheel itself,
-          # drop toolpatch (already installed from testpypi) and fetch the
-          # rest from real PyPI; keeps this step in sync with pyproject
-          smoke/bin/python -c "import importlib.metadata as md; print('\n'.join(md.requires('proxytool')))" \
-            | grep -v '^toolpatch' > /tmp/deps.txt || true
-          uv pip install --python smoke/bin/python \
-            --index-url https://pypi.org/simple/ -r /tmp/deps.txt
+          # drop toolpatch (installed above) and fetch the rest from real
+          # PyPI; keeps this step in sync with pyproject
+          if smoke/bin/python -c "import proxytool" 2>/dev/null; then
+            smoke/bin/python -c "import importlib.metadata as md; print('\n'.join(md.requires('proxytool')))" \
+              | grep -v '^toolpatch' > /tmp/deps.txt || true
+            uv pip install --python smoke/bin/python \
+              --index-url https://pypi.org/simple/ -r /tmp/deps.txt
+            smoke/bin/proxytool version
+          fi
           smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
-          smoke/bin/proxytool version
 
   publish-pypi:
-    needs: publish-testpypi
+    needs: [publish-testpypi, prepare]
     if: ${{ !contains(github.ref_name, 'rc') }}
     runs-on: ubuntu-latest
     environment:
@@ -85,6 +152,9 @@ jobs:
       url: https://pypi.org/project/proxytool/
     permissions:
       id-token: write
+    env:
+      PACKAGES: ${{ needs.prepare.outputs.packages }}
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - uses: actions/download-artifact@v5
@@ -93,20 +163,25 @@ jobs:
           path: dist/
       - name: publish to pypi
         run: |
-          for pkg in toolpatch proxytool; do
+          set -euo pipefail
+          for pkg in $PACKAGES; do
             uv publish \
               --trusted-publishing always \
               --check-url https://pypi.org/simple/ \
-              dist/$pkg/*
+              "dist/$pkg"/*
           done
       - name: smoke-test from pypi
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          set -euo pipefail
           cd /tmp
           uv venv smoke
-          for i in 1 2 3 4 5; do
-            uv pip install --python smoke/bin/python --refresh "proxytool==$VERSION" && break
-            sleep 15
+          for pkg in $PACKAGES; do
+            for i in 1 2 3 4 5; do
+              uv pip install --python smoke/bin/python --refresh "$pkg==$VERSION" && break
+              sleep 15
+            done
           done
           smoke/bin/python -c "import toolpatch; print(toolpatch.__all__)"
-          smoke/bin/proxytool version
+          if smoke/bin/python -c "import proxytool" 2>/dev/null; then
+            smoke/bin/proxytool version
+          fi

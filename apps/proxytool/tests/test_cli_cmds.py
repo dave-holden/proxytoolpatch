@@ -286,6 +286,30 @@ def test_cmd_serve_runs_uvicorn_once(state_env, monkeypatch):
     assert os.environ["PTP_UPSTREAM_URL"] == "http://127.0.0.1:8288"
 
 
+def test_cmd_serve_upstream_models_flags_export_routes(state_env, monkeypatch):
+    """Repeatable --upstream-models NAME=m1,m2 must produce a routing table."""
+    # cmd_serve writes these DIRECTLY (os.environ); pre-set them so monkeypatch
+    # restores them and they don't leak into later tests.
+    for key in ("PTP_UPSTREAM_GGUF", "PTP_UPSTREAM_GGUF_MODELS",
+                "PTP_UPSTREAM_MLX", "PTP_UPSTREAM_MLX_MODELS",
+                "PTP_DEFAULT_BACKEND"):
+        monkeypatch.setenv(key, "")
+    monkeypatch.setattr("uvicorn.run", lambda *a, **kw: None)
+    args = _parse([
+        "serve", "--port", "8972",
+        "--upstream", "gguf=http://127.0.0.1:8181",
+        "--upstream-models", "gguf=qwen-gguf,qwen",
+        "--upstream", "mlx=http://127.0.0.1:8281",
+        "--upstream-models", "mlx=qwen-mlx",
+        "--default-backend", "mlx",
+    ])
+    assert cli.cmd_serve(args) == 0
+    assert os.environ["PTP_UPSTREAM_GGUF"] == "http://127.0.0.1:8181"
+    assert os.environ["PTP_UPSTREAM_GGUF_MODELS"] == "qwen-gguf,qwen"
+    assert os.environ["PTP_UPSTREAM_MLX_MODELS"] == "qwen-mlx"
+    assert os.environ["PTP_DEFAULT_BACKEND"] == "mlx"
+
+
 def test_flag_or_env(monkeypatch):
     args = types.SimpleNamespace(value=None)
     assert cli._flag_or_env(args, ["A", "B"], "value") == ""

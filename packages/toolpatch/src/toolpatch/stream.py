@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from toolpatch.extractor import extract_tool_calls
+from toolpatch.extractor import WRAPPER_TAGS, extract_tool_calls
 from toolpatch.logging import get_logger
 
 log = get_logger("toolpatch.stream")
@@ -30,6 +30,10 @@ _HERMES_OPEN = "<tool_call>"
 _FENCE_MARK = "```"
 _JSON_BRACE = '{"name"'
 _BRACE = "{"
+# Template-specific wrappers the extractor strips along with the payload.
+# Without holding on these, `<tools>` is released as prose before the call
+# inside it resolves, and the client renders the tag next to the tool call.
+_WRAPPER_OPENS = tuple(f"<{tag}>" for tag in WRAPPER_TAGS)
 
 
 class StreamHealer:
@@ -170,6 +174,10 @@ class StreamHealer:
         fence = buf[-len(_FENCE_MARK):] if len(buf) >= len(_FENCE_MARK) else buf
         if _FENCE_MARK.startswith(fence) or buf.count(_FENCE_MARK) % 2 == 1:
             return True
+        for opener in _WRAPPER_OPENS:
+            tail = buf[-len(opener):] if len(buf) >= len(opener) else buf
+            if opener.startswith(tail):
+                return True
         # Any leading '{' opens a candidate tool-call object until either the
         # extractor resolves it (feed re-checks each delta) or max_buffer
         # forces release. The replayed mlx stream showed a bare {"name"...}
@@ -199,4 +207,8 @@ class StreamHealer:
         hold signal. Fences are already covered by the tail rule's parity
         check.
         """
-        return _HERMES_OPEN in buf or _JSON_BRACE in buf
+        return (
+            _HERMES_OPEN in buf
+            or _JSON_BRACE in buf
+            or any(opener in buf for opener in _WRAPPER_OPENS)
+        )

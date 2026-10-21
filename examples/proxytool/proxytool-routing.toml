@@ -1,0 +1,54 @@
+# proxytool in "direct" mode: four already-running backends, no llama-swap.
+#
+#   proxytool serve --config examples/proxytool/proxytool-routing.toml
+#
+# Ports (see docs/RIG.md):
+#   8180 proxytool · 8181 llama serve qwen-gguf · 8182 llama serve phi-4-mini
+#   8281 mlx_lm.server qwen-mlx · 8381 oMLX phi-4-mini-mlx
+#
+# Precedence per key: CLI flag > env var > this file > built-in default.
+# [upstream] and [routing.*] are mutually exclusive — use one or the other.
+
+host = "127.0.0.1"
+port = 8180
+log_level = "info"
+
+# Backend used when no routing entry lists the requested model id.
+default_backend = "qwen-gguf"
+
+# ── one entry per backend; `models` are the client-facing ids ────────────────
+[routing.qwen-gguf]            # llama.cpp, GGUF
+url = "http://127.0.0.1:8181"
+models = ["qwen-gguf"]
+
+[routing.phi-4-mini]           # llama.cpp, GGUF
+url = "http://127.0.0.1:8182"
+models = ["phi-4-mini"]
+
+[routing.qwen-mlx]             # mlx_lm.server
+url = "http://127.0.0.1:8281"
+models = ["qwen-mlx"]
+
+[routing.phi-4-mini-mlx]       # oMLX (model dir name == OpenAI model id)
+url = "http://127.0.0.1:8381"
+models = ["phi-4-mini-mlx"]
+
+# ── client alias → the id the upstream actually serves ──────────────────────
+[model_map]
+# mlx_lm.server resolves an unknown model id against HF and answers
+# 404 "Repository Not Found", so the alias must be pinned here.
+"qwen-mlx" = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+# oMLX serves the directory name, which is the id we send, so no entry is
+# needed for phi-4-mini-mlx. If oMLX picks the model up from the Hugging Face
+# cache instead, its id is the mangled cache dir name — map it here:
+# "phi-4-mini-mlx" = "mlx-community--Phi-4-mini-instruct-4bit"
+
+# ── LoopGuard: identical requests → nudge, then abort ───────────────────────
+[loopguard]
+nudge = 3
+abort = 6
+
+# ── payload tracing (stderr by default) ─────────────────────────────────────
+[trace]
+enabled = false
+# file = "/tmp/proxytool-trace.log"

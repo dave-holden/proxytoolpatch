@@ -152,3 +152,29 @@ def test_tied_overlap_without_path_returns_alias(client, mock_upstream):
     assert res.status_code == 200
     sent = route.calls.last.request.read().decode("utf-8")
     assert '"qwen-mlx"' in sent
+
+
+# -- routed setups -----------------------------------------------------------
+
+def test_routed_mode_keeps_alias_unmodified(client, mock_upstream, monkeypatch):
+    """With a routing table active, an unmapped id is never rewritten.
+
+    Each backend has its own id space; probing the default backend would
+    map `qwen-mlx-omlx` onto the swap group's `qwen-mlx` and send the
+    request to the wrong server.
+    """
+    from proxytool.routing import Backend, BackendRouter
+
+    router = BackendRouter()
+    router.register(Backend(name="default", url="http://test", default=True))
+    monkeypatch.setattr(main_mod, "get_router", lambda: router)
+    # Pre-seeded discovery: a similar id exists, and must not be used to
+    # rewrite an id that belongs to a different backend.
+    monkeypatch.setattr(main_mod, "_UPSTREAM_MODELS", ["qwen-mlx", "qwen-gguf"])
+    route = _chat(mock_upstream)
+
+    res = _post(client, "qwen-mlx-omlx")
+    assert res.status_code == 200
+    sent = route.calls.last.request.read().decode("utf-8")
+    assert '"qwen-mlx-omlx"' in sent
+    assert '"qwen-mlx"' not in sent

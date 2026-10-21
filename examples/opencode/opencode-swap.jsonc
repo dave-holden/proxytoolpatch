@@ -1,0 +1,39 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "share": "disabled",
+
+  "provider": {
+    "proxytool": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "proxytool",
+      "options": {
+        "apiKey": "not-needed",
+        // keep the /v1 suffix: @ai-sdk/openai-compatible appends
+        // "chat/completions" to baseURL, and /v1 is what engages the
+        // tool-call repair route instead of the catch-all passthrough.
+        "baseURL": "http://127.0.0.1:8180/v1"
+      },
+      "models": {
+        "qwen-gguf": {
+          "name": "Qwen2.5-Coder-14B (GGUF)"
+        },
+        "qwen-mlx": {
+          "name": "Qwen2.5-Coder-14B (MLX)"
+        },
+        "phi-4-mini": {
+          "name": "Phi-4-mini Q5_K_M (GGUF)"
+        },
+        "phi-4-mini-mlx": {
+          "name": "Phi-4-mini 4bit (MLX, oMLX)"
+        }
+      }
+    }
+  },
+
+  // ids match the llama-swap model keys (or the mode-2 routing entries)
+  "model": "proxytool/qwen-gguf",
+  "small_model": "proxytool/phi-4-mini",
+  "mcp": {},
+  "plugin": []
+}
