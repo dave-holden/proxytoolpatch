@@ -18,7 +18,7 @@ log_level = "info"          # debug | info | warning | error
 # ── single-backend setup: llama-swap (or any OpenAI-compatible gateway) ──────
 [upstream]
 url = "http://127.0.0.1:8080/v1"
-# timeout = 600             # seconds; cover cold model loads
+timeout = 600             # seconds; covers llama-swap cold model swaps
 # api_key = "sk-..."        # static bearer token sent upstream
 
 # ── multi-backend routing (alternative to [upstream]) ────────────────────────
@@ -36,11 +36,13 @@ url = "http://127.0.0.1:8080/v1"
 # default_backend = "mlx"   # top-level: backend used when no model list matches
 
 # ── client alias → real model id ─────────────────────────────────────────────
-# Aliases in opencode/pi configs are meaningless to the upstream; this map
-# rewrites them. mlx_lm.server resolves unknown ids against HF otherwise.
-[model_map]
-"qwen-gguf" = "qwen2.5-coder-14b-instruct"
-"qwen-mlx" = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+# Not needed for the three-model swap demo: llama-swap's keys
+# (qwen-gguf, qwen-mlx, phi-4-mini) are already the ids the clients send,
+# so they pass through untouched. Add a map only if the upstream ids differ
+# from the client ids (mlx_lm.server would otherwise resolve an unknown id
+# against HF and return "Repository Not Found"):
+# [model_map]
+# "qwen-gguf" = "qwen2.5-coder-14b-instruct-q4_k_m"
 
 # ── LoopGuard: same request repeated → nudge, then abort ─────────────────────
 [loopguard]

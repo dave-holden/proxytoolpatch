@@ -1,6 +1,7 @@
 {
   // pi (pi.dev) provider config — drop this content into ~/.pi/agent/models.json
-  // or run with PI_MODELS_FILE pointed at a copy. Requires pi >= node 22.
+  // or copy it to <dir>/models.json and set PI_CODING_AGENT_DIR=<dir>.
+  // Requires pi >= node 22.
   "providers": {
     "proxytool": {
       "baseUrl": "http://127.0.0.1:8180/v1",
@@ -26,6 +27,21 @@
           "input": ["text"],
           "contextWindow": 16384,
           "maxTokens": 8192
+        },
+        {
+          "id": "phi-4-mini",
+          "name": "Phi-4-mini Q5_K_M via proxytool",
+          "input": ["text"],
+          "contextWindow": 16384,
+          "maxTokens": 4096
+        },
+        {
+          // oMLX serves the model directory name as the id (see docs/RIG.md).
+          "id": "phi-4-mini-mlx",
+          "name": "Phi-4-mini 4bit via oMLX",
+          "input": ["text"],
+          "contextWindow": 16384,
+          "maxTokens": 4096
         }
       ]
     }

@@ -58,3 +58,7 @@ coverage.xml
 
 # Catch-all for stray logs
 *.log
+
+SENARIOS/
+docs/
+tmp/
