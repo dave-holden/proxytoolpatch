@@ -1,0 +1,82 @@
+name: release candidates
+
+# "Release Please"-style automation. After every push to main (and weekly, in
+# case something was missed), each workspace package's unreleased commits are
+# scanned; where any exist:
+#   - the package's `pyproject.toml` version is bumped via `uv version`,
+#   - its `CHANGELOG.md` gains the pending section (git-cliff, labelled with
+#     the tag that will be pushed after the merge),
+#   - everything is committed to a single `release/next` PR and opened or
+#     updated via peter-evans/create-pull-request.
+#
+# Merging does NOT publish: push the `toolpatch-v*`/`proxytool-v*` tags listed
+# in the PR body — publish.yml then ships to PyPI and release-package.yml
+# commits the regenerated changelog + creates the GitHub release.
+#
+# The bump commit message is `chore(release): ...`, which excludes it from the
+# next scan (see SKIP_SUBJECTS in tools/release/plan.py and commit_parsers in
+# cliff.toml), so an untagged merge never opens a second bump PR.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history + tags: the planner diffs each package against its last
+      # `toolpatch-v*` / `proxytool-v*` tag. Always plan from the default
+      # branch, never from release/next, so reruns stay idempotent.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.13"
+
+      - name: plan release candidates per package
+        id: plan
+        run: |
+          set -euo pipefail
+          # plan.py needs only stdlib (tomllib on 3.11+); keep it off the
+          # workspace venv so syncing the packages can't break the planner.
+          uv run --no-project --python 3.13 tools/release/plan.py \
+            --output-md "${{ runner.temp }}/pr-body.md" \
+            --output-json "${{ runner.temp }}/plan.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: show the plan
+        run: cat "${{ runner.temp }}/plan.json"
+
+      - name: open or update the release PR
+        if: steps.plan.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
+          branch: release/next
+          delete-branch: true # recreated (and updated) on the next run
+          title: ${{ steps.plan.outputs.title }}
+          body-path: ${{ runner.temp }}/pr-body.md
+          commit-message: ${{ steps.plan.outputs.title }}
+          labels: |
+            release
+          add-paths: |
+            apps/*/pyproject.toml
+            apps/*/CHANGELOG.md
+            packages/*/pyproject.toml
+            packages/*/CHANGELOG.md
+            uv.lock

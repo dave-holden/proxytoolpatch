@@ -1,0 +1,93 @@
+# git-cliff configuration shared by every workspace package.
+#
+# Each package owns an independent CHANGELOG.md built from the commits that
+# touch its own directory and from tags namespaced with its own name:
+#
+#   git cliff --include-path packages/toolpatch \
+#             --tag-pattern '^toolpatch-v[0-9]' --all \
+#             -o packages/toolpatch/CHANGELOG.md
+#
+# `--include-path` is the git-cliff >= 2.x spelling of `--path`, which 2.x
+# removed. tools/release/changelog.sh wraps every invocation below so nobody
+# has to remember the flags; see tools/release/README.md.
+
+[remote.github]
+owner = "dave-holden"
+repo = "proxytoolpatch"
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this package, generated from
+[Conventional Commits](https://www.conventionalcommits.org/) with
+[git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
+`tools/release/changelog.sh <package>`.
+"""
+body = """
+{% set repo = "https://github.com/dave-holden/proxytoolpatch" -%}
+{% if version -%}
+{# version is the scoped tag (toolpatch-v0.4.0); show just 0.4.0. #}
+{% set name = version | split(pat="-v") | last | trim_start_matches(pat="v") -%}
+## [{{ name }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+
+{% for commit in commits -%}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | split(pat="\n") | first | upper_first }}{% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}]({{ repo }}/pull/{{ commit.remote.pr_number }})){% endif %} ([`{{ commit.id | truncate(length=7, end="") }}`]({{ repo }}/commit/{{ commit.id }}))
+{% endfor %}
+{% endfor -%}
+{% if previous.version -%}
+[{{ previous.version }}...{{ version }}]({{ repo }}/compare/{{ previous.version }}...{{ version }})
+{% endif -%}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+# Legacy (pre-Conventional-Commits) history is still worth publishing: keep it
+# and group it under "Other Changes" instead of silently dropping it.
+filter_unconventional = false
+filter_commits = false
+split_commits = false
+protect_breaking_commits = false
+
+# Every package tag is "<package>-v<version>" (toolpatch-v0.4.0). This pattern
+# is the default; callers narrow it further with --tag-pattern so toolpatch
+# never sees proxytool tags.
+tag_pattern = "[a-z][a-z0-9_]*-v[0-9]*"
+topo_order = true
+sort_commits = "oldest"
+
+# Commit routing. Order matters: the first matching parser wins, so breaking
+# changes come first and merge/release-bot noise is skipped before grouping.
+commit_parsers = [
+  # Empty-message commits are noise (and render as a bare bullet).
+  { message = "^\\s*$", skip = true },
+  { message = "^Merge ", skip = true },
+  # Changelog/release commits produced by this repo's own automation: they must
+  # never appear, otherwise every release feeds the next one.
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^Release: ", skip = true },
+  { message = "^chore\\(deps\\)", group = "Dependencies" },
+  { body = ".*BREAKING[ -]CHANGE.*", group = "Breaking Changes" },
+  { message = "^[a-zA-Z]+(\\(.+\\))?!:.*", group = "Breaking Changes" },
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^revert", group = "Reverts" },
+  { message = "^chore|^build|^ci|^test|^style", group = "Miscellaneous" },
+  { message = "^.*", group = "Other Changes" },
+]
+
+# A commit subject often already carries "(#123)"; the template renders the PR
+# link from the API metadata instead, so drop the duplicate suffix.
+commit_preprocessors = [
+  { pattern = "\\s*\\(#\\d+\\)\\s*$", replace = "" },
+]
