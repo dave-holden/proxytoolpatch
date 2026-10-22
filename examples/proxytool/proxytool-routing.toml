@@ -2,7 +2,7 @@
 #
 #   proxytool serve --config examples/proxytool/proxytool-routing.toml
 #
-# Ports (see docs/RIG.md):
+# Ports (see dev/RIG.md — local-only, not in the repo):
 #   8180 proxytool · 8181 llama serve qwen-gguf · 8182 llama serve phi-4-mini
 #   8281 mlx_lm.server qwen-mlx · 8381 oMLX phi-4-mini-mlx
 #
