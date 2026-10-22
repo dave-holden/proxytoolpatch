@@ -4,8 +4,8 @@ Runnable, copy-paste example configs for every moving part of the setup.
 Nothing here is loaded automatically — each file documents at its top where
 it belongs and what to edit.
 
-Ports, startup order and the per-server commands live in
-[`../docs/RIG.md`](../docs/RIG.md).
+Ports, startup order and the per-server commands live in `dev/RIG.md`
+(local-only, not in this repo).
 
 | File | What | Where it goes |
 |---|---|---|

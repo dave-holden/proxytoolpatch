@@ -36,7 +36,7 @@
           "maxTokens": 4096
         },
         {
-          // oMLX serves the model directory name as the id (see docs/RIG.md).
+          // oMLX serves the model directory name as the id (see dev/RIG.md).
           "id": "phi-4-mini-mlx",
           "name": "Phi-4-mini 4bit via oMLX",
           "input": ["text"],
