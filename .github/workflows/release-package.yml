@@ -2,16 +2,13 @@ name: release a package
 
 # Triggered by scoped tags only (legacy combined `v*` tags are handled by
 # publish.yml). For toolpatch-v0.4.0 this workflow:
-#   1. rebuilds packages/toolpatch/CHANGELOG.md from the full history,
-#   2. pushes that changelog to the default branch as a `chore(release)`
-#      commit (skipped by downstream workflows via [skip ci]),
-#   3. creates the GitHub release for the tag with the tag's changelog
-#      section as the body.
+#   1. renders the tag's changelog section as release notes,
+#   2. creates the GitHub release for the tag.
 # It runs beside publish.yml (same tag): that one builds + uploads to PyPI,
-# this one owns CHANGELOG.md and the GitHub Release.
+# this one owns the GitHub Release.
 #
-# If the default branch is protected against the bot, the push step fails with
-# a clear error; alternative is to open a PR from the workflow instead.
+# CHANGELOG.md is owned by the release PR (tools/release/plan.py); it is not
+# rewritten here because main is PR-protected and the bot cannot push to it.
 on:
   push:
     tags: ["*-v*.*.*"]
@@ -51,14 +48,6 @@ jobs:
           echo "dir=$dir"     >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: rebuild per-package changelog
-        run: |
-          set -euo pipefail
-          # Token enables GitHub PR metadata in changelog links; local/tokenless
-          # runs fall back to --offline inside tools/release/changelog.sh.
-          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
-            tools/release/changelog.sh rebuild "${{ steps.pkg.outputs.name }}"
-
       - name: rebuild release notes for the tag
         run: |
           set -euo pipefail
@@ -74,32 +63,6 @@ jobs:
               "${{ steps.pkg.outputs.dir }}"\
                 > "${{ runner.temp }}/release-notes.md"
           fi
-
-      - name: push changelog to the default branch
-        run: |
-          set -euo pipefail
-          base="${{ github.event.repository.default_branch }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${{ steps.pkg.outputs.dir }}/CHANGELOG.md"
-          if git diff --cached --quiet; then
-            echo "changelog is up to date; nothing to commit"
-            exit 0
-          fi
-          # [skip ci] keeps this commit from re-running the push-triggered
-          # workflows; the changelog is also out of every package's test path.
-          git commit -m \
-            "chore(release): ${{ steps.pkg.outputs.name }} ${{ steps.pkg.outputs.version }} changelog [skip ci]"
-          for attempt in 1 2 3; do
-            if git push origin "HEAD:$base"; then
-              exit 0
-            fi
-            echo "push attempt $attempt failed; fetching + rebasing"
-            git fetch origin "$base"
-            git rebase "origin/$base"
-          done
-          echo "::error::could not push the changelog update to $base — is $base protected against github-actions?"
-          exit 1
 
       - name: create the GitHub release
         uses: softprops/action-gh-release@v2
