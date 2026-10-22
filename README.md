@@ -145,7 +145,8 @@ Eight subcommands:
 
 `proxytool serve --help` lists all flags; `proxytool --help` never starts a
 server. Lifecycle state lives in `$PTP_STATE_PATH` or
-`/tmp/proxytool-serve-state.json` — see `docs/DEVELOPMENT.md`.
+`/tmp/proxytool-serve-state.json` — see `dev/DEVELOPMENT.md`
+(dev docs live outside the repo, in local-only `dev/`).
 
 ### Flags (every flag has an env-var equivalent — flags win)
 
@@ -265,10 +266,10 @@ history-shape `400`s) is exactly what this proxy adds — see
 
 A complete worked setup — two models behind llama-swap, proxytool in front,
 `opencode`/`pi` as the agent. For the port map, per-server commands and
-config files (llama.cpp, mlx_lm, oMLX, llama-swap, proxytool, pi, opencode),
-see [`docs/RIG.md`](docs/RIG.md); for a staged, byte-level walkthrough of a
-single request through those four hops (what each stage adds, rewrites and
-drops), see [`docs/PAYLOADS.md`](docs/PAYLOADS.md).
+build resource files (llama.cpp, mlx_lm, oMLX, llama-swap, proxytool, pi,
+opencode) are documented in `dev/RIG.md`; for a staged, byte-level walkthrough of
+a single request through those four hops (what each stage adds, rewrites and
+drops), see `dev/PAYLOADS.md`. Both are local-only, not part of this repo.
 
 **1. Declare the models in llama-swap's config** (it starts each backend on
 demand for the first request, unloads it after `ttl` seconds idle):
