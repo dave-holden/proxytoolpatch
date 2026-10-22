@@ -33,10 +33,12 @@ if command -v uv >/dev/null 2>&1; then
   step "ruff lint"              uv run ruff check .
   step "pytest (default python)" uv run pytest -q
   if [[ "$STAGE" == "pre-push" && "${FULL_MATRIX:-0}" == "1" ]]; then
-    if [[ -x scripts/test-matrix.sh ]]; then # local-only (untracked) full matrix
+    if [[ -x dev/scripts/test-matrix.sh ]]; then # local-only (untracked) full matrix
+      step "full python matrix" ./dev/scripts/test-matrix.sh
+    elif [[ -x scripts/test-matrix.sh ]]; then # pre-dev/ layouts still work
       step "full python matrix" ./scripts/test-matrix.sh
     else
-      echo "  ⚠ FULL_MATRIX=1 but scripts/test-matrix.sh not found locally — skipped" >&2
+      echo "  ⚠ FULL_MATRIX=1 but dev/scripts/test-matrix.sh not found locally — skipped" >&2
     fi
   fi
 else

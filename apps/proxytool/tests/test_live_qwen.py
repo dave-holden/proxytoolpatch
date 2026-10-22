@@ -2,10 +2,10 @@
 
 Opt-in: skipped unless ``PTP_LIVE=1``. Requires an upstream already running on
 ``PTP_UPSTREAM_URL`` (default ``http://127.0.0.1:8181``) that can actually run
-the model — start it with ``scripts/dev-rig.sh gguf <model.gguf>`` / ``mlx <model>``,
+the model — start it with ``dev/scripts/dev-rig.sh gguf <model.gguf>`` / ``mlx <model>``,
 or run the whole rig and test together with:
 
-    PTP_LIVE=1 scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf uv-test
+    PTP_LIVE=1 dev/scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf uv-test
 
 Checks the real failure mode end-to-end through the proxytool, streaming and
 non-streaming, using a prompt that reliably triggers tool use on Qwen:

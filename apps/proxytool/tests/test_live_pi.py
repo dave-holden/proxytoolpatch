@@ -3,7 +3,7 @@
 Opt-in via ``PTP_LIVE=1`` (also auto-skips when the ``pi`` CLI is not on PATH
 or no live proxytool is reachable). Requires a running rig:
 
-    ./scripts/dev-rig.sh mlx mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+    ./dev/scripts/dev-rig.sh mlx mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
 
     PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q
 
