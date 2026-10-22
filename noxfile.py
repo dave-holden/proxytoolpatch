@@ -13,7 +13,7 @@ pytest``): uv builds the workspace members as WHEELS under the target
 interpreter in a throwaway env, so the result is the real compatibility test —
 not an editable-install shortcut. That also means nox never needs to pip-build
 the workspace packages itself, and the uv interpreter/caches are shared with
-`scripts/test-matrix.sh` and CI.
+`dev/scripts/test-matrix.sh` and CI.
 """
 
 from __future__ import annotations
