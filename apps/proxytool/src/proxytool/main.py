@@ -173,10 +173,16 @@ async def _resolve_model(model: str) -> str:
     model. mlx_lm.server resolves unknown model ids against HF (401/404
     "Repository Not Found"), so an unmapped alias must never be forwarded
     raw when the real id is discoverable.
+
+    In routed mode only the explicit map applies: backends have separate id
+    spaces, and probing one backend's /v1/models would rewrite an id that
+    belongs to another (`qwen-mlx-omlx` → `qwen-mlx` on the swap group).
     """
     mapped = settings.model_map.get(model)
     if mapped:
         return mapped
+    if get_router() is not None:
+        return model
     global _UPSTREAM_MODELS
     if _UPSTREAM_MODELS is None:
         try:
@@ -238,7 +244,11 @@ def _resolve_backend(payload: dict[str, Any]) -> Backend:
     dropdown use the repair hints in the toolpatch library instead.
     """
     model = str(payload.get("model") or "")
-    if "mlx" in model.lower() or model.startswith("mlx-community/"):
+    # Check the alias the client sent *and* the real id PTP_MODEL_MAP points
+    # it at: a client may call an MLX model "qwen", leaving the only MLX hint
+    # in the mapping, and the mapped id is what the backend actually runs.
+    candidates = (model, settings.model_map.get(model, ""))
+    if any(m and "mlx" in m.lower() for m in candidates):
         return "mlx"
     return "gguf"
 

@@ -7,8 +7,9 @@ or no live proxytool is reachable). Requires a running rig:
 
     PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q
 
-pi is configured via ``PI_MODELS_FILE`` (an isolated temp models.json) so the
-test never touches ``~/.pi/agent/models.json``. It registers an
+pi is configured via ``PI_CODING_AGENT_DIR`` (an isolated temp agent dir
+containing models.json) so the test never touches ``~/.pi/agent/models.json``.
+It registers an
 ``openai-completions`` provider at the proxytool and runs ``pi -p <prompt>``
 (print mode, one-shot), then asserts:
 
@@ -85,11 +86,15 @@ def _make_pi_env(workdir: Path) -> tuple[dict[str, str], Path]:
             }
         }
     }
-    cfg_path = workdir / "pi-models-test.json"
+    # pi reads <agent dir>/models.json; PI_CODING_AGENT_DIR relocates the
+    # whole agent dir so the user's ~/.pi/agent is never touched.
+    agent_dir = workdir / "pi-agent"
+    agent_dir.mkdir(exist_ok=True)
+    cfg_path = agent_dir / "models.json"
     cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
     env = os.environ.copy()
-    env["PI_MODELS_FILE"] = str(cfg_path)
+    env["PI_CODING_AGENT_DIR"] = str(agent_dir)
     return env, cfg_path
 
 
