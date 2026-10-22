@@ -3,10 +3,10 @@
 Opt-in via ``PTP_LIVE=1`` (also auto-skips when the ``opencode`` CLI is not on
 PATH or no live proxytool is reachable). Requires a running rig:
 
-    ./scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf      # terminal 1
+    ./dev/scripts/dev-rig.sh gguf $MPATH/qwen2.5-...gguf      # terminal 1
 
     PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_opencode.py -q
-    # or one-shot:  ./scripts/dev-rig.sh gguf <model> uv-test
+    # or one-shot:  ./dev/scripts/dev-rig.sh gguf <model> uv-test
 
 opencode is configured via ``OPENCODE_CONFIG`` (an isolated temp JSONC file) so
 the test never touches ``~/.config/opencode`` — no plugins, no MCP servers, no

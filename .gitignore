@@ -15,9 +15,7 @@ wheels/
 .nox/
 
 # Local-only working files (deliberately not part of the repo)
-PLAN.md
 RELEASE.md
-Running.md
 Obsolete/
 history.txt
 oc-stderr.log
@@ -29,14 +27,6 @@ oc-stderr.log
 .codex/
 .continue/
 .freebuff
-
-# Untracked local developer tooling (documented in dev/DEVELOPMENT.md:
-# git hooks, dev rig, test matrix — nothing in the repo depends on them)
-scripts/
-
-# Local config copies (the tracked, canonical configs live in examples/)
-config/*
-
 # Local capture images / build artifacts pulled in from external builds
 apps/proxytool/public/assets/images/proxytool-with-bg.webp
 packages/toolpatch/public/assets/images/toolpatch-with-bg.webp
@@ -59,8 +49,8 @@ coverage.xml
 # Catch-all for stray logs
 *.log
 
-# Ignored work zones (temp outputs, scenarios, local dev docs, drafts)
-SENARIOS/
+# Ignored root work zones (local scratch + local docs, now prepared for
+# user-facing docs/; all dev material lives in the untracked dev/)
 docs/
 tmp/
 dev/
