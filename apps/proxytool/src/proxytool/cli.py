@@ -240,6 +240,20 @@ def _pick_single_backend_url(backends: dict[str, Backend], args: Any,
     return env_upstream or "http://127.0.0.1:8181"
 
 
+def _parse_upstream_models(specs: list[str] | None) -> dict[str, str]:
+    """Turn repeatable ``--upstream-models NAME=m1,m2`` flags into a mapping."""
+    out: dict[str, str] = {}
+    for spec in specs or []:
+        name, sep, ids = spec.partition("=")
+        name = name.strip().lower()
+        if not sep or not name or not ids.strip():
+            raise ValueError(
+                f"--upstream-models expects NAME=m1,m2, got: {spec!r}"
+            )
+        out[name] = ids
+    return out
+
+
 def cmd_serve(args: Any) -> int:
     # 0. TOML config bridge (precedence: flag > env > file > default).
     cfg_path, _cfg, cfg_info = _apply_toml_config(args, serve=True, routing=True)
@@ -250,7 +264,8 @@ def cmd_serve(args: Any) -> int:
 
     # 1. Resolve backends: explicit flags, then env, then single --upstream-url.
     backends = backends_from_args(
-        args.upstream, dict(args.upstream_models or {}), args.default_backend
+        args.upstream, _parse_upstream_models(args.upstream_models),
+        args.default_backend,
     )
     if not backends:
         backends = backends_from_env()

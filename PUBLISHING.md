@@ -2,9 +2,12 @@
 
 How to publish `toolpatch` and `proxytool` to PyPI.
 
-**Both packages publish from this workspace** (tag `v*` →
-`.github/workflows/publish.yml` builds + uploads both, gated on the full test
-matrix):
+**Both packages publish from this workspace**, each with its own version and
+tag — push `toolpatch-vX.Y.Z` or `proxytool-vX.Y.Z` and
+`.github/workflows/publish.yml` builds + uploads only that package, gated on
+the full test matrix. The older combined tag `vX.Y.Z` still releases both at
+the same version. Because the tags are independent, the two packages do not
+have to share a version:
 
 - **`toolpatch`** — the pure-logic repair engine. Import-name dependency-free
   beyond `pydantic`; installable by any Python server needing leak repair.
@@ -30,18 +33,18 @@ Create a PyPI account and an API token at <https://pypi.org/manage/account/token
 ## 2. Pre-publish checklist (every release)
 
 ```bash
-# 1. Versions bumped in BOTH pyproject.toml files (Patch/Minor/Major rules below)
+# 1. Bump only the modules that changed, each by its own Patch/Minor/Major rules
 grep -H '^version' packages/toolpatch/pyproject.toml apps/proxytool/pyproject.toml
+uv lock                            # keep uv.lock's workspace versions in sync
 
-# 2. RELEASE.md has a new section: "## vX.Y.Z (YYYY-MM-DD)" + bullet changes
-# 3. Checks green
+# 2. Checks green
 uv run pytest                      # full suite
 uv run ruff check .
 uv run pyright
 uv run nox -s test                 # full 3.10–3.14 matrix (same sessions as CI)
 uv run nox -s coverage             # branch coverage snapshot worth recording
 
-# 4. Build test (both members)
+# 3. Build test (both members)
 (cd packages/toolpatch && uv build) && (cd apps/proxytool && uv build)
 ```
 
@@ -126,15 +129,36 @@ uvx twine upload dist/*                  # prompts for user/token via keyring
 
 ---
 
-## 6. Tag the release
+## 6. Tag the release (per package)
+
+Tags are namespaced per package, so each one can move on its own:
 
 ```bash
-git tag -a vX.Y.Z -m "vX.Y.Z: <one-line summary>"
-# if a remote exists:
-git push origin vX.Y.Z
+git tag -a toolpatch-vX.Y.Z -m "toolpatch X.Y.Z: <one-line summary>"
+git tag -a proxytool-vX.Y.Z -m "proxytool X.Y.Z: <one-line summary>"
+git push origin toolpatch-vX.Y.Z proxytool-vX.Y.Z     # push only what you tag
 ```
 
-Match this to the RELEASE.md section just added (version number, no hash).
+One command per package if you prefer:
+
+```bash
+git push origin toolpatch-vX.Y.Z   # publishes toolpatch only
+git push origin proxytool-vX.Y.Z   # publishes proxytool only
+```
+
+Rules:
+
+- The tag's version must equal the version in that package's `pyproject.toml`;
+  CI's `prepare` job fails the run on a mismatch (nothing is uploaded).
+- Publish `toolpatch` **before** `proxytool` when both moved: proxytool depends
+  on toolpatch unpinned and its smoke test installs toolpatch from PyPI.
+- `proxytool-vX.Y.Zrc1` goes to TestPyPI only (any `rc` in the tag skips the
+  PyPI job), so the two packages never share a release gate. Write the tag
+  exactly as the version appears in `pyproject.toml` (`0.5.0rc1`, not
+  `0.5.0-rc1`), or `prepare` rejects it.
+- The combined `vX.Y.Z` tag still works and publishes both at one version.
+- Deleting a tag that was already pushed is not a rollback: PyPI refuses
+  re-uploads of an existing version, so bump instead.
 
 ---
 
@@ -160,13 +184,51 @@ If that fails, yank or re-upload; do **not** push a broken release to `latest`.
 
 ---
 
-## 8. Automate later (optional)
+## 8. CI automation (already wired)
 
-When you set up a remote, add a GitHub Actions job that:
+`.github/workflows/publish.yml` is the canonical path; the manual steps above
+stay as the fallback. On a `toolpatch-v*` / `proxytool-v*` / `v*` tag push it:
 
-1. runs pytest/ruff/pyright
-2. builds on `git tag vX.Y.Z`
-3. does `twine upload` with `PYPI_TOKEN` from repo secrets
+1. runs the full test matrix (`tests-gate`), then validates the tag version
+   against the package's `pyproject.toml` (`prepare`)
+2. builds only the tagged package(s) (`build`)
+3. uploads to TestPyPI and smoke-installs the wheel(s) in a clean venv
+   (`publish-testpypi`; every tag goes here, so rc tags stop at this step)
+4. uploads to PyPI and re-runs the smoke install (`publish-pypi`, skipped when
+   the tag contains `rc`)
 
-Tools like [`hatch`](https://hatch.pypa.io/) or `uv publish` can simplify
-steps 4–5 once CI exists; the manual steps above are the canonical fallback.
+Trusted Publishing is used (`--trusted-publishing always`), so no token is
+needed once the PyPI/TestPyPI environments are configured.
+
+---
+
+## 9. Per-package changelogs & release automation
+
+Each package keeps an independent `CHANGELOG.md` in its own directory, rebuilt
+by [git-cliff](https://git-cliff.org) from the commits that touch that package
+only (config: root [`cliff.toml`](cliff.toml); helpers: [`tools/release/`](tools/release/README.md)):
+
+```bash
+tools/release/changelog.sh rebuild toolpatch     # full history -> packages/toolpatch/CHANGELOG.md
+tools/release/changelog.sh notes proxytool proxytool-v0.4.0   # one tag's section
+```
+
+Two more workflows close the loop:
+
+- **`release-pr.yml`** — scans every package's unreleased commits after pushes
+  to main (and weekly) and opens/updates a `release/next` PR that bumps each
+  changed package's `pyproject.toml` via `uv version` and prepends its pending
+  changelog section. Breaking → major, `feat` → minor, otherwise patch.
+- **`release-package.yml`** — on each `toolpatch-v*` / `proxytool-v*` tag:
+  rebuilds that package's changelog, pushes it to the default branch, and
+  creates the GitHub Release for the tag with the tag's section as the body.
+
+So the shortest end-to-end path is: merge the release PR, push the tags in its
+body, done. For releases that bypass the automation, add step 2.5 here:
+rebuild + commit the affected package's `CHANGELOG.md` **before** tagging, or
+let `release-package.yml` commit it after the fact:
+
+```bash
+tools/release/changelog.sh rebuild toolpatch
+git commit -m "chore(release): toolpatch X.Y.Z changelog"
+```

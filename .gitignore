@@ -30,7 +30,7 @@ oc-stderr.log
 .continue/
 .freebuff
 
-# Untracked local developer tooling (documented in docs/DEVELOPMENT.md:
+# Untracked local developer tooling (documented in dev/DEVELOPMENT.md:
 # git hooks, dev rig, test matrix — nothing in the repo depends on them)
 scripts/
 
@@ -58,3 +58,9 @@ coverage.xml
 
 # Catch-all for stray logs
 *.log
+
+# Ignored work zones (temp outputs, scenarios, local dev docs, drafts)
+SENARIOS/
+docs/
+tmp/
+dev/

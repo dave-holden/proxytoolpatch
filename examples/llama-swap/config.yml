@@ -1,31 +1,60 @@
-# llama-swap upstream example — run as: llama-swap --config llama-swap/config.yml
-# It serves an OpenAI-compatible gateway on http://127.0.0.1:8080 and spawns
-# llama-server per <model> on first use (V2 API; `groups` keeps a single model
-# loaded at a time so one GPU serves several models).
+# llama-swap swap demo — three models, one loaded at a time.
 #
-# Point proxytool at it and add client-alias mapping:
+#   llama-swap --config examples/llama-swap/config.yml --listen 127.0.0.1:8080
 #
-#     proxytool serve --upstream-url http://127.0.0.1:8080 \
-#       --model-map '{"qwen-gguf":"qwen2.5-coder-14b-instruct-q4_k_m"}'
+# Needs:
+#   brew install llama.cpp        # provides `llama` (GGUF backends: `llama serve`)
+#   uv tool install mlx-lm        # provides mlx_lm.server (MLX backend)
 #
-# or see examples/proxytool/proxytool.toml for the TOML equivalent
-# ([upstream] url + [model_map]).
+# Prefetch Phi once (otherwise the first swap also downloads ~5 GB):
+#   hf download bartowski/microsoft_Phi-4-mini-instruct-GGUF \
+#     --include '*Q5_K_M.gguf'
 #
-# Swappable parts: the HF source path in `cmd` (llama-swap rewrites ${model}
-# to the value under `model`), the ctx size, and the port — update
-# proxytool's --model-map to match.
+# The YAML keys ARE the model ids clients send, so proxytool, pi and
+# opencode use them verbatim — no proxytool --model-map is required.
+# Rename a key here and you must update the client configs to match.
 
-healthCheckTimeout: 120          # seconds; a 14B GGUF cold load can be slow
+healthCheckTimeout: 500   # 14B cold load; also covers a first Phi load
 logLevel: info
+globalTTL: 120            # seconds idle before unload (makes swaps visible)
 
 models:
-  qwen2.5-coder-14b-instruct-q4_k_m:
-    cmd: |
-      llama-server
-        --host 127.0.0.1 --port ${PORT}
-        --ctx-size 16384 --jinja
-        --model /models/HF_Qwen2.5-Coder-14B-Instruct-GGUF/qwen2.5-coder-14b-instruct-q4_k_m.gguf
+  qwen-gguf:
+    cmd: >
+      llama serve --host 127.0.0.1 --port ${PORT}
+      -c 16384 -ngl 999 --jinja -a qwen-gguf
+      -hf Qwen/Qwen2.5-Coder-14B-Instruct-GGUF
+      --hf-file qwen2.5-coder-14b-instruct-q4_0.gguf
 
-groups:                          # one loaded model at a time (swap on demand)
-  "swap":
-    - "qwen2.5-coder-14b-instruct-q4_k_m"
+  qwen-mlx:
+    # mlx_lm.server has no /health, so health-check the OpenAI models route.
+    checkEndpoint: /v1/models
+    # llama-swap routes on the request's `model` field but forwards it
+    # unchanged; mlx_lm.server then treats "qwen-mlx" as an HF repo id and
+    # 404s "Repository Not Found". Send the real artifact instead.
+    useModelName: mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+    cmd: >
+      mlx_lm.server --host 127.0.0.1 --port ${PORT}
+      --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
+
+  phi-4-mini:
+    cmd: >
+      llama serve --host 127.0.0.1 --port ${PORT}
+      -c 16384 -ngl 999 --jinja -a phi-4-mini
+      -hf bartowski/microsoft_Phi-4-mini-instruct-GGUF
+      --hf-file microsoft_Phi-4-mini-instruct-Q5_K_M.gguf
+
+# One member resident at a time: asking for another model evicts the current
+# one. (`exclusive: true` also unloads anything outside this group.)
+routing:
+  router:
+    use: group
+    settings:
+      groups:
+        "swap":
+          swap: true
+          exclusive: true
+          members:
+            - "qwen-gguf"
+            - "qwen-mlx"
+            - "phi-4-mini"
