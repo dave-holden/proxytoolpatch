@@ -8,10 +8,11 @@
 [![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)](https://www.python.org)
 [![code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-**In plain terms:** you run one thing — `proxytool serve` — and it takes care
-of the rest: it can start your local model server(s) for you (llama-server,
-mlx_lm.server), watches them, routes each request to the right model, and fixes
-garbled tool calls before your agent client ever sees them. You point
+**In plain terms:** you run `proxytool serve` in front of the model server(s)
+you already have (llama-server, mlx_lm.server / omlx, or llama-swap in front of
+both): it routes each request to the right backend and fixes garbled tool calls
+before your agent client ever sees them. It does **not** launch those servers —
+automatic start/stop is llama-swap's job (or compose/systemd). You point
 `opencode`, `pi`, or any OpenAI-compatible client at `http://127.0.0.1:8180/v1`
 and stop thinking about it.
 
@@ -77,8 +78,9 @@ multi-backend routing over already-running OpenAI-compatible servers.
 A thin launcher around the FastAPI app (`src/proxytool/cli.py`; entry point
 registered in `apps/proxytool/pyproject.toml` as a `project.scripts` console
 script, so installing the package puts `proxytool` on your PATH). It does
-*not* replace Uvicorn: it builds a uvicorn server in-process after
-optionally starting and health-checking the backend processes it fronts.
+*not* replace Uvicorn: it builds a uvicorn server in-process (`start`
+daemonises that same `serve` process) and health-checks the upstream(s) it
+fronts — it never launches the model servers themselves.
 
 ### Install & run
 
@@ -122,7 +124,8 @@ Eight subcommands:
 
 `proxytool serve --help` lists all flags; `proxytool --help` never starts a
 server. Lifecycle state lives in `$PTP_STATE_PATH` or
-`/tmp/proxytool-serve-state.json` — see `docs/DEVELOPMENT.md`.
+`/tmp/proxytool-serve-state.json` — see `dev/DEVELOPMENT.md`
+(dev docs live outside the repo, in local-only `dev/`).
 
 ### Flags (every flag has an env-var equivalent — flags win)
 
@@ -204,7 +207,7 @@ uv run pytest apps/proxytool/tests/test_routing_integration.py -q
 ```bash
 uv sync --all-packages          # one shared root .venv (workspace members editable)
 
-# Terminal 1: fake upstream (or your real llama-server / mlx server on 8181)
+# Terminal 1: fake upstream (or a real backend on 8181: `llama serve` / mlx_lm.server)
 uv run uvicorn fake_upstream:app --host 127.0.0.1 --port 8181
 
 # Terminal 2: the proxytool
@@ -224,7 +227,7 @@ curl -s http://127.0.0.1:8180/v1/chat/completions \
 
 ```bash
 # GGUF
-llama-server --host localhost --port 8181 \
+llama serve --host localhost --port 8181 \
   --model $MPATH/qwen2.5-coder-14b-instruct-q4_k_m.gguf \
   --ctx-size 16384 --jinja
 
@@ -241,7 +244,10 @@ history-shape `400`s) is exactly what this proxy adds — see
 ## End-to-end: the real stack (llama / mlx_lm + llama-swap + opencode or pi)
 
 A complete worked setup — two models behind llama-swap, proxytool in front,
-`opencode`/`pi` as the agent.
+`opencode`/`pi` as the agent. For a staged, byte-level walkthrough of a single
+request through those four hops (what each stage adds, rewrites and drops), see
+`dev/PAYLOADS.md` (local-only, `../../dev/PAYLOADS.md` from here, not in this
+repo).
 
 **1. Declare the models in llama-swap's config** (it starts each backend on
 demand for the first request, unloads it after `ttl` seconds idle):
@@ -251,7 +257,7 @@ demand for the first request, unloads it after `ttl` seconds idle):
 health-check: true
 models:
   qwen-gguf:
-    cmd: llama-server --host 127.0.0.1 --port ${PORT} --ctx-size 16384 --jinja --model /models/qwen2.5-coder-14b.gguf
+    cmd: llama serve --host 127.0.0.1 --port ${PORT} --ctx-size 16384 --jinja --model /models/qwen2.5-coder-14b.gguf
     ttl: 300
   qwen-mlx:
     cmd: python -m mlx_lm.server --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit --port ${PORT}
@@ -278,11 +284,12 @@ pi --provider proxytool --model qwen-mlx -p "list the files in ."   # one-shot t
 proxytool health && proxytool models                  # sanity check
 ```
 
-**4. Without llama-swap**, start the server yourself (llama-server / mlx_lm)
-and point proxytool at it — proxytool fronts whatever is already listening:
+**4. Without llama-swap**, start the server yourself (`llama serve` /
+`mlx_lm.server`) and point proxytool at it — proxytool fronts whatever is
+already listening:
 
 ```bash
-llama-server --host 127.0.0.1 --port 8181 --jinja --model "$MPATH/qwen.gguf" &
+llama serve --host 127.0.0.1 --port 8181 --jinja --model "$MPATH/qwen.gguf" &
 proxytool serve --upstream-url http://127.0.0.1:8181
 ```
 
@@ -348,7 +355,7 @@ see the routing bullets below for alias-to-id mapping.)
   and content buffers while a leak might be forming.
 - **Header preservation** — client `Authorization` and routing headers are
   forwarded per-request; additionally, `PTP_UPSTREAM_API_KEY` sends a static
-  bearer token upstream (for `llama-server --api-key` or gated gateways).
+  bearer token upstream (for `llama serve --api-key` or gated gateways).
 - **Cold starts** — the first request after an idle period may take a while
   while llama-swap loads the model; that's what the timeout covers. If you
   set `PTP_LOOP_NUDGE`/`PTP_LOOP_ABORT` too low, a cold-start retry storm
@@ -508,8 +515,9 @@ Also auto-skips when `opencode` is not on PATH. Extra env:
 ### Real client test (pi, opt-in)
 
 Same idea as the opencode client test but for **pi**: an isolated temp
-`PI_MODELS_FILE` (never touching `~/.pi/agent/models.json`) registers an
-`openai-completions` provider pointed at `http://127.0.0.1:8180/v1`, then
+`PI_CODING_AGENT_DIR` (whose `models.json` is a throwaway, never touching
+`~/.pi/agent/models.json`) registers an `openai-completions` provider pointed
+at `http://127.0.0.1:8180/v1`, then
 `pi --provider proxytool --model qwen-mlx -p "..."` runs one-shot in a
 throwaway sandbox dir. We assert the run completes, a structured tool call
 survived pi's stream parser, and zero tag-artifact or raw-JSON leakage in the

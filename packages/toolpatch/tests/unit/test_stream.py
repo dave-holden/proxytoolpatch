@@ -168,3 +168,23 @@ def test_leading_brace_json_value_stream_released():
     assert any(e["type"] == "content" for e in events)  # max_buffer released it
     events += h.finish()
     assert events  # finished without hanging
+
+
+def test_tools_wrapper_leak_never_reaches_content():
+    """`<tools>{...}</tools>` must promote as a call, not as stray markup."""
+    text = '<tools>{"name": "list_dir", "arguments": {"path": "."}}</tools>'
+    events = _feed_chunks(text, 4)
+    calls = [e for e in events if e["type"] == "tool_calls"]
+    assert len(calls) == 1
+    assert calls[0]["tool_calls"][0]["function"]["name"] == "list_dir"
+    content = "".join(e.get("text", "") for e in events if e["type"] == "content")
+    assert "<tools>" not in content and "</tools>" not in content
+
+
+def test_function_wrapper_leak_never_reaches_content():
+    text = '<function>{"name": "list_dir", "arguments": {}}</function>'
+    events = _feed_chunks(text, 3)
+    calls = [e for e in events if e["type"] == "tool_calls"]
+    assert len(calls) == 1
+    content = "".join(e.get("text", "") for e in events if e["type"] == "content")
+    assert "<function>" not in content and "</function>" not in content

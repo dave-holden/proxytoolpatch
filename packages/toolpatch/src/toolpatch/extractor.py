@@ -7,6 +7,13 @@ Recognition families (all merged into one result, document order):
 1. Hermes XML:  <tool_call>{...}</tool_call>
 2. Fenced JSON:  ```json {...} ```
 3. Bare object:  {"name": ..., "arguments": ...} inside prose
+
+Families 2 and 3 can sit inside a template-specific wrapper tag — the live
+Qwen2.5-Coder GGUF run emits ``<tools>{"name": …}</tools>`` or
+``<function>{…}</function>`` depending on the template it loaded with, and
+the MLX build ``<function-call>…</function-call>``.  A wrapper around the
+leak envelope is part of the leak: leaving ``<tools></tools>`` behind in
+``content`` makes clients render stray markup next to the parsed call.
 """
 
 from __future__ import annotations
@@ -34,6 +41,23 @@ _RAW_RE = re.compile(
 )
 
 CallSource = Literal["hermes", "fenced", "raw_json", "mixed"]
+
+# Template-specific wrappers around a leaked call (see module docstring):
+# the same Qwen2.5-Coder build writes `<tools>{...}</tools>` or
+# `<function>{...}</function>` depending on the chat template it was loaded
+# with; MLX builds use `<function-call>`. All of them are leak syntax.
+WRAPPER_TAGS = (
+    "tools", "functions", "function",
+    # singular/plural, hyphen/underscore: the same model has been seen writing
+    # `<function>`, `<function-call>` and `<function-calls>` on successive
+    # prompts with one chat template loaded.
+    "tool_call", "tool_calls", "tool-call", "tool-calls",
+    "function_call", "function_calls", "function-call", "function-calls",
+)
+_WRAPPER_OPEN_RE = re.compile(
+    r"<\s*(" + "|".join(re.escape(t) for t in WRAPPER_TAGS) + r")\s*>\s*$"
+)
+_WRAPPER_CLOSE = r"\s*</\s*{tag}\s*>"
 
 
 @dataclass(frozen=True)
@@ -83,6 +107,21 @@ def _parse_candidate(regex: re.Pattern[str], m: re.Match[str]) -> dict[str, Any]
     return parsed2 if isinstance(parsed2, dict) and "name" in parsed2 else None
 
 
+def _absorb_wrapper(content: str, lo: int, hi: int) -> tuple[int, int]:
+    """Extend a leak span over a template wrapper that encloses the call.
+
+    The wrapper is leak syntax, not prose: strip it with the payload instead
+    of leaving `<tools></tools>` in the repaired content. An opener with no
+    close yet (mid-stream) is absorbed too — only the tag is dropped.
+    """
+    m = _WRAPPER_OPEN_RE.search(content[:lo])
+    if m is None:
+        return lo, hi
+    close = re.compile(_WRAPPER_CLOSE.format(tag=re.escape(m.group(1))))
+    cm = close.match(content, hi)
+    return m.start(), (cm.end() if cm else hi)
+
+
 def _collect_all(content: str,
                  tool_names: set[str] | None) -> ExtractedToolCalls | None:
     """Run every detector family and merge the distinct calls found.
@@ -114,12 +153,15 @@ def _collect_all(content: str,
     found.sort(key=lambda c: (c[0], c[1]))
     lo = found[0][0]
     hi = found[-1][1]  # nested/overlapping spans are deduped, so ends ascend
+    env_lo, env_hi = _absorb_wrapper(content, lo, hi)
     # Whitespace OUTSIDE the leak envelope (pre-first / post-last span) is
     # model padding around the leak — strip it. Whitespace INSIDE the
     # envelope (between two leaked calls) is genuine inter-call prose —
-    # keep it verbatim, including its edge spaces.
-    head = content[:lo].rstrip()
-    tail = content[hi:].lstrip()
+    # keep it verbatim, including its edge spaces. The envelope can reach
+    # wider than the calls themselves (template wrapper tags), so head and
+    # tail are cut at env_* while the call slices still come from lo/hi.
+    head = content[:env_lo].rstrip()
+    tail = content[env_hi:].lstrip()
     cleaned = head
     pos = lo
     for s, e, _, _ in found:

@@ -214,6 +214,71 @@ def test_mlx_backend_strips_tool_choice_and_maps_model(client, monkeypatch):
     assert "tools" in captured  # tools survive the mlx backend for repair
 
 
+def test_mlx_detected_through_model_map_alias(client, monkeypatch):
+    """A neutral alias mapped to an MLX repo id still counts as mlx.
+
+    llama-swap model keys are arbitrary; nothing forces "mlx" into them, so
+    the only artifact hint may live in PTP_MODEL_MAP.
+    """
+    import importlib
+
+    monkeypatch.setenv(
+        "PTP_MODEL_MAP",
+        '{"qwen": "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"}',
+    )
+    from proxytool import settings as settings_mod
+    importlib.reload(settings_mod)
+    import proxytool.main as main_mod
+    importlib.reload(main_mod)
+
+    captured: dict = {}
+
+    async def fake_forward_json(path, payload, headers=None):
+        captured.update(payload)
+
+        class _Resp:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"choices": [{"message": {"role": "assistant",
+                                                 "content": "ok"}}]}
+
+        return _Resp()
+
+    monkeypatch.setattr(main_mod.conduit, "forward_json", fake_forward_json)
+
+    res = client.post("/v1/chat/completions", json={
+        "model": "qwen",
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [TOOL],
+        "tool_choice": "auto",
+    })
+    assert res.status_code == 200
+    assert "tool_choice" not in captured, "mlx dialect must be detected via the map"
+    assert captured["model"] == "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
+
+
+def test_unknown_fields_forwarded_verbatim(client, mock_upstream):
+    """Client-specific fields (e.g. a mode) reach the upstream untouched.
+
+    proxytool forwards unknown body fields as-is; it does not interpret them.
+    """
+    mock_upstream.post("/v1/chat/completions").respond(
+        200, json={"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
+    )
+    res = client.post("/v1/chat/completions", json={
+        "model": "qwen",
+        "messages": [{"role": "user", "content": "hi"}],
+        "mode": "review",
+        "profile": "coder",
+    })
+    assert res.status_code == 200
+    sent = json.loads(mock_upstream.calls[-1].request.content)
+    assert sent["mode"] == "review"
+    assert sent["profile"] == "coder"
+
+
 def test_stream_plain_answer_not_mangled(client, mock_upstream):
     body = {
         "model": "qwen",
