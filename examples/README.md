@@ -11,9 +11,9 @@ Ports, startup order and the per-server commands live in `dev/RIG.md`
 |---|---|---|
 | [`proxytool/proxytool.toml`](proxytool/proxytool.toml) | The proxytool's own config: server bind, upstream, routing, model map, LoopGuard, tracing | `~/.config/proxytool/config.toml` or `./proxytool.toml` next to where you run it |
 | [`proxytool/proxytool-routing.toml`](proxytool/proxytool-routing.toml) | Same, for the gateway-less rig: four backends on fixed ports 8181/8182/8281/8381, routed by model id | `proxytool serve --config examples/proxytool/proxytool-routing.toml` |
-| [`opencode-gguf.jsonc`](opencode-gguf.jsonc) | opencode client wired to `proxytool/qwen-gguf` (llama-server upstream) | `OPENCODE_CONFIG=./examples/opencode-gguf.jsonc` |
-| [`opencode-mlx.jsonc`](opencode-mlx.jsonc) | opencode client wired to `proxytool/qwen-mlx` (mlx_lm.server upstream) | `OPENCODE_CONFIG=./examples/opencode-mlx.jsonc` |
-| [`opencode-swap.jsonc`](opencode-swap.jsonc) | opencode client listing all four models (three swap-demo + the oMLX Phi) | `OPENCODE_CONFIG=./examples/opencode-swap.jsonc` |
+| [`opencode/opencode-gguf.jsonc`](opencode/opencode-gguf.jsonc) | opencode client wired to `proxytool/qwen-gguf` (llama-server upstream) | `OPENCODE_CONFIG=./examples/opencode/opencode-gguf.jsonc` |
+| [`opencode/opencode-mlx.jsonc`](opencode/opencode-mlx.jsonc) | opencode client wired to `proxytool/qwen-mlx` (mlx_lm.server upstream) | `OPENCODE_CONFIG=./examples/opencode/opencode-mlx.jsonc` |
+| [`opencode/opencode-swap.jsonc`](opencode/opencode-swap.jsonc) | opencode client listing all four models (three swap-demo + the oMLX Phi) | `OPENCODE_CONFIG=./examples/opencode/opencode-swap.jsonc` |
 | [`pi/models.json`](pi/models.json) | pi client provider + four model aliases (`qwen-gguf`, `qwen-mlx`, `phi-4-mini`, `phi-4-mini-mlx`) through the proxy | `~/.pi/agent/models.json` (or `$PI_CODING_AGENT_DIR/models.json`) |
 | [`llama-swap/config.yml`](llama-swap/config.yml) | llama-swap gateway: three models in one swap group, spawned on demand | `llama-swap --config examples/llama-swap/config.yml` |
 
@@ -79,7 +79,7 @@ next while proxytool waits out the cold start.
 **4. Or opencode:**
 
 ```bash
-export OPENCODE_CONFIG=./examples/opencode-swap.jsonc
+export OPENCODE_CONFIG=./examples/opencode/opencode-swap.jsonc
 opencode run -m proxytool/qwen-gguf  "List the files in this directory."
 opencode run -m proxytool/qwen-mlx   "List the files in this directory."
 opencode run -m proxytool/phi-4-mini "List the files in this directory."

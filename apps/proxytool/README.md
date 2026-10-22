@@ -539,4 +539,4 @@ PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q         # + pi
 ```
 
 PyCharm Run/Debug (watch payloads transit, breakpoints, fake-upstream
-config): see **PLAN.md §6** in the repository root.
+config): see **§6 of `dev/PLAN.md`** (local-only, not part of this repo).
