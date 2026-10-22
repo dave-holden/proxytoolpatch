@@ -5,6 +5,14 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.4.1] - 2026-10-22
+
+### Other Changes
+
+- Local dev material consolidated under untracked dev/ ([`46946ff`](https://github.com/dave-holden/proxytoolpatch/commit/46946ff370dab4bc726571a7ac06a9e8f56657d6))
+
+[proxytool-v0.4.0...proxytool-v0.4.1](https://github.com/dave-holden/proxytoolpatch/compare/proxytool-v0.4.0...proxytool-v0.4.1)
+
 ## [0.4.0] - 2026-10-22
 
 ### Other Changes
