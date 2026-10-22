@@ -199,3 +199,36 @@ stay as the fallback. On a `toolpatch-v*` / `proxytool-v*` / `v*` tag push it:
 
 Trusted Publishing is used (`--trusted-publishing always`), so no token is
 needed once the PyPI/TestPyPI environments are configured.
+
+---
+
+## 9. Per-package changelogs & release automation
+
+Each package keeps an independent `CHANGELOG.md` in its own directory, rebuilt
+by [git-cliff](https://git-cliff.org) from the commits that touch that package
+only (config: root [`cliff.toml`](cliff.toml); helpers: [`tools/release/`](tools/release/README.md)):
+
+```bash
+tools/release/changelog.sh rebuild toolpatch     # full history -> packages/toolpatch/CHANGELOG.md
+tools/release/changelog.sh notes proxytool proxytool-v0.4.0   # one tag's section
+```
+
+Two more workflows close the loop:
+
+- **`release-pr.yml`** — scans every package's unreleased commits after pushes
+  to main (and weekly) and opens/updates a `release/next` PR that bumps each
+  changed package's `pyproject.toml` via `uv version` and prepends its pending
+  changelog section. Breaking → major, `feat` → minor, otherwise patch.
+- **`release-package.yml`** — on each `toolpatch-v*` / `proxytool-v*` tag:
+  rebuilds that package's changelog, pushes it to the default branch, and
+  creates the GitHub Release for the tag with the tag's section as the body.
+
+So the shortest end-to-end path is: merge the release PR, push the tags in its
+body, done. For releases that bypass the automation, add step 2.5 here:
+rebuild + commit the affected package's `CHANGELOG.md` **before** tagging, or
+let `release-package.yml` commit it after the fact:
+
+```bash
+tools/release/changelog.sh rebuild toolpatch
+git commit -m "chore(release): toolpatch X.Y.Z changelog"
+```
