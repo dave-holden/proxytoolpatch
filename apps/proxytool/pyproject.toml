@@ -1,9 +1,10 @@
 [project]
 name = "proxytool"
-version = "0.4.0"
+version = "0.4.1"
 description = "FastAPI proxytool conduit standing between agent clients and Qwen servers"
 readme = "README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "toolpatch",
