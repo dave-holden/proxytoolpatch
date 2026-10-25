@@ -6,9 +6,21 @@ name: publish toolpatch + proxytool
 #   proxytool-vX.Y.Z  release proxytool only
 # A per-package tag must match the version declared in that package's
 # pyproject.toml; the `prepare` job fails the run otherwise.
+# The `prepare` job reads those names from the tag; `build` builds the
+# matching packages; `publish-testpypi` then `publish-pypi` push the wheels.
+#
+# Manual runs (workflow_dispatch) on a branch are a DRY-RUN only:
+#   - `prepare` resolves both packages and their declared pyproject versions,
+#     no tag needed;
+#   - `build` runs so you can verify the tagged-state build from the CLI;
+#   - the publish and smoke-test jobs are skipped (they only run when
+#     `ref_type == "tag"`, i.e. on real tag pushes).
+# Handy for rehearsing the release pipeline and for keeping the README badge
+# on `main` meaningful, without ever touching PyPI.
 on:
   push:
     tags: ["v*", "toolpatch-v*", "proxytool-v*"]
+  workflow_dispatch:
 
 jobs:
   tests-gate:
@@ -27,6 +39,21 @@ jobs:
         name: resolve packages + version from tag
         run: |
           set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            # DRY-RUN: no tag is available, so take both packages and read
+            # each package's declared version from its pyproject.
+            packages="toolpatch proxytool"
+            pyproject="apps/proxytool/pyproject.toml"
+            version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$pyproject" | head -n1)
+            if [ -z "$version" ]; then
+              echo "::error::could not read a version from $pyproject"
+              exit 1
+            fi
+            echo "dry-run: packages=$packages version=$version"
+            echo "packages=$packages" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           ref="${GITHUB_REF_NAME}"
           case "$ref" in
             toolpatch-v*) packages="toolpatch"; version="${ref#toolpatch-v}" ;;
@@ -78,6 +105,7 @@ jobs:
 
   publish-testpypi:
     needs: [build, prepare]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -145,7 +173,7 @@ jobs:
 
   publish-pypi:
     needs: [publish-testpypi, prepare]
-    if: ${{ !contains(github.ref_name, 'rc') }}
+    if: github.ref_type == 'tag' && !contains(github.ref_name, 'rc')
     runs-on: ubuntu-latest
     environment:
       name: pypi
