@@ -1,7 +1,7 @@
 
 <div align="left">
   <h1 style="display: inline; position: top;">proxytoolpatch</h1>
-  <img src="http:/github.com/dave-holden/proxytoolpatch/raw/main/public/assets/images/proxytoolpatch.webp" alt="proxytoolpatch logo" width="72" align="left" />
+  <img src="https://github.com/dave-holden/proxytoolpatch/raw/main/public/assets/images/proxytoolpatch.webp" alt="proxytoolpatch logo" width="72" align="left" />
   <p>Fixing tool-call mismatches in local Qwen LLMs.</p>
 </div>
 
@@ -82,8 +82,8 @@ round-trip verified end-to-end in live agent sessions. Ships a `proxytool`
 multi-backend routing over already-running OpenAI-compatible servers.
 
 > This app imports all repair logic from the sibling library
-> [`packages/toolpatch`](../../packages/toolpatch/README.md). Workspace
-> overview and install: root [`README.md`](../../README.md).
+> [`packages/toolpatch`](packages/toolpatch/README.md). Workspace
+> overview and install: this [`README.md`](README.md).
 
 ## The rig
 
@@ -260,7 +260,7 @@ python -m mlx_lm.server --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit --
 support, which keeps most Hermes-tag leaks local to the server. What it does
 *not* cover (fenced/bare-JSON leaks from other models, malformed JSON,
 history-shape `400`s) is exactly what this proxy adds — see
-[`packages/toolpatch/README.md`](../../packages/toolpatch/README.md).
+[`packages/toolpatch/README.md`](packages/toolpatch/README.md).
 
 ## End-to-end: the real stack (llama / mlx_lm + llama-swap + opencode or pi)
 
@@ -561,4 +561,4 @@ PTP_LIVE=1 uv run pytest apps/proxytool/tests/test_live_pi.py -q         # + pi
 ```
 
 PyCharm Run/Debug (watch payloads transit, breakpoints, fake-upstream
-config): see **PLAN.md §6** in the repository root.
+config): see **§6 of `dev/PLAN.md`** (local-only, not part of this repo).
