@@ -22,7 +22,7 @@ jobs:
       packages: ${{ steps.resolve.outputs.packages }}
       version: ${{ steps.resolve.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: resolve
         name: resolve packages + version from tag
         run: |
@@ -60,7 +60,7 @@ jobs:
     env:
       PACKAGES: ${{ needs.prepare.outputs.packages }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           python-version: "3.13"
