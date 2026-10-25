@@ -1,0 +1,37 @@
+# Dependabot version updates — https://docs.github.com/en/code-security/dependabot
+# Works hand-in-hand with the security alerts you already see:
+#   - alerts flag vulnerable versions in the lockfile/chart
+#   - this file makes Dependabot propose the bumps as PRs on a schedule
+#
+# `uv` covers this workspace's uv-managed Python dependencies (uv.lock — the
+# same inventory the security alerts read). `github-actions` bumps the pinned
+# action SHAs in .github/workflows. Both land through the protected-main PR
+# gate, same as every other change.
+
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "dave-holden"
+    groups:
+      # Roll all pip-family bumps into one PR per week to keep main turning over.
+      pip-and-tooling:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+    ignore:
+      # The 3.10 floor keeps filelock 4.1.0 — every newer release requires
+      # Python >= 3.11. Dependabot re-flagging it just burns a PR slot.
+      - dependency-name: "filelock"
+        versions: [">= 4.1.1"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "dave-holden"
+    open-pull-requests-limit: 5
