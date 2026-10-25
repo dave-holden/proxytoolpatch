@@ -5,6 +5,14 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.4.1] - 2026-10-25
+
+### Other Changes
+
+- Declare MIT license; document the no-Codebuff rule for agents ([`4b420d7`](https://github.com/dave-holden/proxytoolpatch/commit/4b420d796dac725ad33aad0b562db3064711eb1f))
+
+[toolpatch-v0.4.0...toolpatch-v0.4.1](https://github.com/dave-holden/proxytoolpatch/compare/toolpatch-v0.4.0...toolpatch-v0.4.1)
+
 ## [0.4.0] - 2026-10-22
 
 ### Other Changes
