@@ -72,7 +72,9 @@ from the GitHub API as well.
    `!:`/`BREAKING CHANGE` for breaking).
 2. `tools/release/plan.py` (or just let `release-pr.yml` do it) bumps versions
    and opens `release/next` — breaking → major, `feat` → minor, everything
-   else → patch, per package and independently.
+   else → patch, per package and independently. While a package is still 0.x a
+   breaking change bumps the minor (`0.4.2` → `0.5.0`): 1.0.0 stays a
+   deliberate decision.
 3. Merge the PR, then push the tags listed in its body (toolpatch first when
    both packages moved — proxytool depends on toolpatch unpinned).
 4. Each tag triggers `publish.yml` (TestPyPI → PyPI) and `release-package.yml`
