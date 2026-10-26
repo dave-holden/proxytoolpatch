@@ -7,6 +7,13 @@ on:
     branches: [main]
   workflow_call:
 
+# Runners are pinned to ubuntu-24.04 rather than ubuntu-latest on purpose:
+# ubuntu-latest is being rolled from 24.04 to 26.04 between 19 Oct and 19 Nov
+# 2026, and this matrix resolves prebuilt wheels per interpreter/glibc — a
+# base-image swap mid-window can flip a compatibility cell with no code change.
+# Moving to ubuntu-26.04 (or back to ubuntu-latest) should be one deliberate PR
+# that re-runs the whole matrix. Dependabot does not bump `runs-on`.
+
 # Every job expresses its intent through a nox session (noxfile.py) instead of
 # hand-written uv commands: nox is the single source of truth for what
 # "tested/checked" means, so adding a Python version or session there is all
@@ -16,7 +23,7 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -25,7 +32,7 @@ jobs:
       - run: uv run nox -s lint
 
   test-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -46,7 +53,7 @@ jobs:
           "test_${{ matrix.module }}(python='${{ matrix.python-version }}')"
 
   pyright:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
