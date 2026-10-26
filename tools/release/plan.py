@@ -268,8 +268,8 @@ def render_markdown(plans: list[Plan], untagged: list[Package]) -> str:
         lines += [
             "### Publish after merging",
             "",
-            "Merge this PR, then push the tag(s) — each one builds, publishes, "
-            "commits the regenerated changelog and opens a GitHub release:",
+            "Merge this PR, then push the tag(s) — each one builds, publishes "
+            "to TestPyPI then PyPI, and opens the GitHub release:",
             "",
             "```bash",
         ]
