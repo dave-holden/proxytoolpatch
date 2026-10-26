@@ -22,11 +22,6 @@ updates:
         patterns:
           - "*"
     open-pull-requests-limit: 5
-    ignore:
-      # The 3.10 floor keeps filelock 4.1.0 — every newer release requires
-      # Python >= 3.11. Dependabot re-flagging it just burns a PR slot.
-      - dependency-name: "filelock"
-        versions: [">= 4.1.1"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

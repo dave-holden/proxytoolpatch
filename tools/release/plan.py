@@ -6,7 +6,8 @@ For each ``apps/*`` and ``packages/*`` member this script:
 1. finds the last scoped tag for that package (``<name>-v<version>``),
 2. collects the unreleased commits that touch only that package's directory,
 3. derives the next version from the Conventional Commit types
-   (breaking -> major, ``feat`` -> minor, everything else -> patch),
+   (breaking -> major, ``feat`` -> minor, everything else -> patch; while the
+   version is still 0.x a breaking change moves the minor instead),
 4. bumps ``pyproject.toml`` with ``uv version --package`` (which also refreshes
    ``uv.lock``), and
 5. prepends the pending section to that package's ``CHANGELOG.md``.
@@ -28,13 +29,9 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-
-try:  # Python >= 3.11
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - 3.10
-    import tomli as tomllib  # type: ignore[no-redef]
 
 ROOT = Path(
     subprocess.run(
@@ -178,6 +175,10 @@ def next_version(current: str, level: str) -> str:
     if not match:
         raise SystemExit(f"cannot parse version {current!r} as X.Y.Z")
     major, minor, patch = (int(match.group(i)) for i in (1, 2, 3))
+    # 0.x semver: the public API is not stable yet, so a breaking change bumps
+    # the minor. Reaching 1.0.0 stays a deliberate decision, not a side effect.
+    if level == "major" and major == 0:
+        return f"0.{minor + 1}.0"
     if level == "major":
         return f"{major + 1}.0.0"
     if level == "minor":

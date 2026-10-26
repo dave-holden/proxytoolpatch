@@ -48,7 +48,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
+import tomllib
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any, Literal
@@ -56,11 +56,6 @@ from typing import Any, Literal
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from proxytool.routing import RESERVED_ROUTE_SUFFIXES
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # Python 3.10 — tomli is the stdlib tomllib backport
-    import tomli as tomllib
 
 CWD_NAMES = ("proxytool.toml", ".proxytool.toml")
 
