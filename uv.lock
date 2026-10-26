@@ -990,7 +990,7 @@ wheels = [
 
 [[package]]
 name = "proxytool"
-version = "0.5.0"
+version = "0.5.1"
 source = { editable = "apps/proxytool" }
 dependencies = [
     { name = "fastapi" },
@@ -1619,7 +1619,7 @@ wheels = [
 
 [[package]]
 name = "toolpatch"
-version = "0.5.0"
+version = "0.5.1"
 source = { editable = "packages/toolpatch" }
 dependencies = [
     { name = "pydantic" },
