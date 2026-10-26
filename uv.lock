@@ -1189,7 +1189,7 @@ wheels = [
 
 [[package]]
 name = "proxytool"
-version = "0.4.1"
+version = "0.4.2rc1"
 source = { editable = "apps/proxytool" }
 dependencies = [
     { name = "fastapi" },
