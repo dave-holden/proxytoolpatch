@@ -5,6 +5,14 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.4.3] - 2026-10-26
+
+### Other Changes
+
+- Consolidate images under root public/ and trim the READMEs ([`cc3e16a`](https://github.com/dave-holden/proxytoolpatch/commit/cc3e16ab619a95e397dd2ed01c4a35bc6701e30d))
+
+[proxytool-v0.4.1...proxytool-v0.4.3](https://github.com/dave-holden/proxytoolpatch/compare/proxytool-v0.4.1...proxytool-v0.4.3)
+
 ## [0.4.2] - 2026-10-26
 
 ### Other Changes
