@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   release-pr:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # Full history + tags: the planner diffs each package against its last
       # `toolpatch-v*` / `proxytool-v*` tag. Always plan from the default

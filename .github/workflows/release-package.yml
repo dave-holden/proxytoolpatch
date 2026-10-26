@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   changelog-and-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # Full history + all tags; check out the default branch so the changelog
       # commit can be pushed straight onto it (publish.yml builds from the tag).
