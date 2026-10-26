@@ -8,6 +8,8 @@ name: publish toolpatch + proxytool
 # pyproject.toml; the `prepare` job fails the run otherwise.
 # The `prepare` job reads those names from the tag; `build` builds the
 # matching packages; `publish-testpypi` then `publish-pypi` push the wheels.
+# A tag containing `rc` stops at TestPyPI (plus a prerelease GitHub Release):
+# that is the rehearsal path for the full release, at no PyPI risk.
 #
 # Manual runs (workflow_dispatch) on a branch are a DRY-RUN only:
 #   - `prepare` resolves both packages and their declared pyproject versions,
@@ -61,7 +63,10 @@ jobs:
             v*)           packages="toolpatch proxytool"; version="${ref#v}" ;;
             *) echo "::error::unsupported tag '$ref'"; exit 1 ;;
           esac
-          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+          # PEP 440 in its normalised form: pre-releases attach directly to
+          # the release segment (0.4.2rc1 is what `uv version` writes), so the
+          # suffix is allowed with or without a separator.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+((a|b|rc)[0-9]+)?([.-][0-9A-Za-z.-]+)?$'; then
             echo "::error::tag '$ref' does not carry a PEP 440 version"; exit 1
           fi
           for pkg in $packages; do
