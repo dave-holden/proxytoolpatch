@@ -5,14 +5,13 @@ description = "FastAPI proxytool conduit standing between agent clients and Qwen
 readme = "README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "toolpatch",
     "fastapi>=0.115",
     "pydantic>=2.9",   # direct import: proxytool.config strict TOML validation
     "uvicorn[standard]>=0.34",
     "httpx>=0.28",
-    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [tool.uv.sources]

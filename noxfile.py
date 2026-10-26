@@ -1,9 +1,9 @@
 """Nox config for the proxytoolpatch workspace — run from the repo root.
 
-    uv run nox                       # default: lint + full matrix (2 modules x 5 Pythons)
+    uv run nox                       # default: lint + full matrix (2 modules x 4 Pythons)
     uv run nox -s test               # the matrix only
     uv run nox -s lint               # ruff
-    uv run nox -s pyright            # type-check on the 3.10 floor (as CI does)
+    uv run nox -s pyright            # type-check on the 3.11 floor (as CI does)
     uv run nox -s 'test_toolpatch(python="3.11")'   # one module, one Python
     uv run nox -s 'test_proxytool(python="3.14")'
 
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import nox
 
-PYTHON_VERSIONS = ("3.10", "3.11", "3.12", "3.13", "3.14")
+PYTHON_VERSIONS = ("3.11", "3.12", "3.13", "3.14")
 
 nox.options.default_venv_backend = "uv"
 nox.options.reuse_existing_virtualenvs = True
@@ -51,10 +51,10 @@ def lint(session: nox.Session) -> None:
 
 @nox.session(venv_backend="none")
 def coverage(session: nox.Session) -> None:
-    """Branch coverage over both modules, measured on the 3.10 floor."""
+    """Branch coverage over both modules, measured on the 3.11 floor."""
     # --all-packages: the checker's env must contain the real dependencies
-    # (fastapi, tomli, …) for import resolution — not just the dev group.
-    argv = ["uv", "run", "--python", "3.10", "--isolated", "--all-packages",
+    # (fastapi, pydantic, …) for import resolution — not just the dev group.
+    argv = ["uv", "run", "--python", "3.11", "--isolated", "--all-packages",
             "--group", "dev", "coverage", "run", "-m", "pytest", "-q"]
     session.run(*argv, external=True)
     session.run("uv", "run", "--group", "dev", "coverage", "report",
@@ -63,15 +63,15 @@ def coverage(session: nox.Session) -> None:
 
 @nox.session(venv_backend="none")
 def pyright(session: nox.Session) -> None:
-    """Type-check on the lowest supported Python (3.10) — mirrors CI."""
+    """Type-check on the lowest supported Python (3.11) — mirrors CI."""
     # --all-packages: the checker's env must contain the real dependencies
-    # (fastapi, tomli, …) for import resolution — not just the dev group.
-    session.run("uv", "run", "--python", "3.10", "--isolated",
+    # (fastapi, pydantic, …) for import resolution — not just the dev group.
+    session.run("uv", "run", "--python", "3.11", "--isolated",
                 "--all-packages", "pyright", external=True)
 
 
 # Param name must literally be `python` so session IDs request the clean
-# `test_toolpatch-3.10` form used in the header help above.
+# `test_toolpatch-3.11` form used in the header help above.
 @nox.parametrize("python", PYTHON_VERSIONS)
 @nox.session(venv_backend="none")
 def test_toolpatch(session: nox.Session, python: str) -> None:

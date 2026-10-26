@@ -3,8 +3,27 @@
 ## PRs & branch protection
 
 `main` is protected on the hosted repo (`github.com/dave-holden/proxytoolpatch`
-— remote `origin`): changes land through a PR, and merging requires the `lint`,
-`test-matrix (…)` and `pyright` checks from `.github/workflows/test.yml`.
+— remote `origin`). Note it is a **ruleset** (`Settings → Rules → Rulesets`,
+named `General`, target `refs/heads/main`), not the older classic branch
+protection: the REST path `branches/main/protection` returns 404 here. Changes
+land through a PR, and merging requires these three checks from
+`.github/workflows/test.yml`:
+
+| Required check | Job |
+|---|---|
+| `lint` | `lint` |
+| `pyright` | `pyright` (type-check on the 3.11 floor) |
+| `test-matrix (3.11, proxytool)` | one cell of the `test-matrix` job |
+
+The ruleset does not require branches to be up to date before merging and has
+no bypass actors (admins included). Only three checks are listed to keep the
+gate short; the rest of the matrix still runs and is still visible on the PR.
+
+**The requirement names the new floor**, so changing the Python matrix means
+editing the ruleset too — `test-matrix (3.10, proxytool)` outlived the 3.10 row
+and blocked every PR until it was renamed (the check never reports, so it is
+not "missing", it is permanently pending).
+
 Recreate these settings if the repo is ever set up again:
 
 1. Create the GitHub repo and add the remote:
@@ -13,15 +32,19 @@ Recreate these settings if the repo is ever set up again:
    git push -u origin main
    ```
 
-2. In *Settings → Branches → Add branch protection rule* for `main`:
+2. In *Settings → Rules → Rulesets → New branch ruleset*, targeting `main`:
+
+  - Enforcement **Active**, empty bypass list
 
   - ✅ Require a pull request before merging
-  - ✅ Require status checks: `lint`, `test-matrix (…)`, `pyright`
-     (from `.github/workflows/test.yml` — they appear after the first PR run)
 
-  - ✅ Require branches to be up to date before merging
+  - ✅ Require status checks: `lint`, `pyright`, `test-matrix (3.11, proxytool)`
+     (they appear in the picker after the first PR run)
 
-  - ✅ Do not allow bypassing (applies to admins too)
+  - ✅ Restrict deletions, ✅ Block force pushes
+
+  - Leave *Require branches to be up to date* **off**: the matrix is slow and
+     the required checks are cheap to reason about on a stale base.
 
 
 3. From then on, work on feature branches and open PRs; `main` is push-protected:
@@ -41,8 +64,8 @@ clone**:
 ```bash
 uv run nox -s lint        # ruff
 uv run pytest             # full local test suite
-uv run nox -s coverage    # branch coverage over both modules (3.10 floor)
-FULL_MATRIX=1 git push    # run the whole 3.10–3.14 matrix in the pre-push gate (if wired)
+uv run nox -s coverage    # branch coverage over both modules (3.11 floor)
+FULL_MATRIX=1 git push    # run the whole 3.11–3.14 matrix in the pre-push gate (if wired)
 ```
 
 The `dev` dependency group includes `httpx2` — since starlette ≥ 1.7 the
@@ -61,8 +84,8 @@ runtime dependency (the proxy conduit imports it directly).
 
 ```bash
 uv run nox -s lint                        # ruff only
-uv run nox -s pyright                     # type-check on the 3.10 floor (as CI)
-uv run nox -s test                        # full matrix: 2 modules × 3.10–3.14
+uv run nox -s pyright                     # type-check on the 3.11 floor (as CI)
+uv run nox -s test                        # full matrix: 2 modules × 3.11–3.14
 uv run nox -s coverage                    # branch coverage, local convenience
 uv run nox -s 'test_toolpatch(python="3.11")'   # one slice
 ```
@@ -70,7 +93,7 @@ uv run nox -s 'test_toolpatch(python="3.11")'   # one slice
 ### How to run the full matrix
 
 "Full matrix" = every real compatibility cell: **2 modules (toolpatch,
-proxytool) × 5 Pythons (3.10–3.14) = 10 pytest runs**, built as wheels in
+proxytool) × 4 Pythons (3.11–3.14) = 8 pytest runs**, built as wheels in
 throwaway envs (exactly what CI runs).
 
 1. From the repository root, run:
@@ -81,7 +104,7 @@ throwaway envs (exactly what CI runs).
 
 2. What to expect:
 
-   - First run is the slow one: uv fetches the 3.10–3.13 interpreters it
+   - First run is the slow one: uv fetches the 3.11–3.13 interpreters it
      doesn't have yet and builds both workspace packages as wheels per cell
      (`nox reuse_existing_virtualenvs` keeps later runs fast).
    - Each cell prints its own pytest line; a cell failing means nox stops on
@@ -92,7 +115,7 @@ throwaway envs (exactly what CI runs).
 3. Run just one cell while iterating:
 
    ```bash
-   uv run nox -s 'test_proxytool(python="3.10")'   # the 3.10 floor, most fragile
+   uv run nox -s 'test_proxytool(python="3.11")'   # the 3.11 floor, most fragile
    uv run nox -s 'test_toolpatch(python="3.14")'   # the newest cell
    ```
 
@@ -100,14 +123,14 @@ throwaway envs (exactly what CI runs).
 
    ```bash
    uv run nox -s lint          # ruff (prereq: keep it green, it is a required check)
-   uv run nox -s pyright       # type-check on the 3.10 floor (as CI)
-   uv run nox -s coverage      # branch coverage snapshot on the 3.10 floor
+   uv run nox -s pyright       # type-check on the 3.11 floor (as CI)
+   uv run nox -s coverage      # branch coverage snapshot on the 3.11 floor
    ```
 
 5. Troubleshooting:
 
    - `InterpreterNotFound` / missing 3.x: let uv fetch it (`uv python install
-     3.10 3.11 3.12 3.13`) — nox hands the lookup to uv.
+     3.11 3.12 3.13 3.14`) — nox hands the lookup to uv.
    - A cell that fails only under the matrix (not plain `uv run pytest`):
      suspect wheel-based builds (`uv run --isolated --no-sources`) vs the
      editable install, missing `--group dev`, or a stale uv cache (`uv cache

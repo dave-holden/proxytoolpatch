@@ -5,7 +5,7 @@ description = "LLM tool-calling protocol repairer (pure logic, offline-testable)
 readme = "README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = ["pydantic>=2.9"]
 
 [build-system]
