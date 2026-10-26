@@ -71,6 +71,7 @@ It may also be useful with other clients and servers that speak a compatible API
 
 - [Proxy application: setup, configuration and troubleshooting](apps/proxytool/README.md)
 - [Tool-patching package: repair logic and development notes](packages/toolpatch/README.md)
+- [Development workflow: gates, test matrix, publish and release rehearsal](DEVELOPMENT.md)
 
 ## Contributing
 
