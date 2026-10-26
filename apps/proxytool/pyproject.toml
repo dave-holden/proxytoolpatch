@@ -1,6 +1,6 @@
 [project]
 name = "proxytool"
-version = "0.4.2rc1"
+version = "0.4.1"
 description = "FastAPI proxytool conduit standing between agent clients and Qwen servers"
 readme = "README.md"
 authors = [{ name = "Dave Holden", email = "holden.dave@gmail.com" }]
