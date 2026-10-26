@@ -12,15 +12,19 @@ that directory, and released under its own namespaced tag
 | `plan.py` | Compute + apply release candidates (version bumps + pending changelog sections) |
 | `../../cliff.toml` | The shared git-cliff configuration (conventional-commit parsing, scope prefixes, commit/PR links) |
 
-Two GitHub Actions wire this up:
+Three GitHub Actions wire this up:
 
-- **`.github/workflows/release-package.yml`** — on a `*-v*.*.*` tag push:
-  rebuild `<pkg>/CHANGELOG.md`, push it to the default branch, create the
-  GitHub Release for the tag. (PyPI publishing on the same tag is
-  `publish.yml`.)
 - **`.github/workflows/release-pr.yml`** — on pushes to main / weekly cron:
   open or update a `release/next` PR with version bumps + pending changelog
   sections for every package that has unreleased commits.
+- **`.github/workflows/publish.yml`** — on a scoped tag: re-run the test
+  suite, build only the tagged package(s), upload to TestPyPI then PyPI, and
+  smoke-install the wheels in a clean venv. Dispatched by hand on a branch it
+  is a dry-run that never touches an index.
+- **`.github/workflows/release-package.yml`** — same scoped tag: render that
+  tag's section from git history and create the GitHub Release for it. It does
+  **not** rewrite `CHANGELOG.md`: `main` is PR-protected, so the released
+  sections belong to the release PR.
 
 ## Local commands
 
@@ -51,7 +55,9 @@ tools/release/changelog.sh notes toolpatch toolpatch-v0.4.0
 tools/release/changelog.sh notes proxytool proxytool-v0.4.0 -o /tmp/notes.md
 ```
 
-### Audit the workspace ("<name><TAB><dir><TAB><version>")```bash
+### Audit the workspace ("<name><TAB><dir><TAB><version>")
+
+```bash
 tools/release/changelog.sh list
 ```
 
@@ -69,8 +75,44 @@ from the GitHub API as well.
    else → patch, per package and independently.
 3. Merge the PR, then push the tags listed in its body (toolpatch first when
    both packages moved — proxytool depends on toolpatch unpinned).
-4. Each tag triggers `publish.yml` (PyPI) and `release-package.yml`
-   (changelog commit + GitHub Release) for exactly one package.
+4. Each tag triggers `publish.yml` (TestPyPI → PyPI) and `release-package.yml`
+   (GitHub Release) for exactly one package.
+5. Rehearse the whole chain on an `rc` tag first when the pipeline itself
+   changed — see below.
+
+## Rehearsing a release (TestPyPI only)
+
+An `rc` tag exercises everything downstream of the release PR — tag guard,
+build, TestPyPI upload, wheel smoke-install, prerelease GitHub Release — while
+`publish-pypi` skips itself (`if: github.ref_type == 'tag' && !contains(
+github.ref_name, 'rc')`). Nothing can reach real PyPI, where a version number
+can never be reused once uploaded.
+
+The tag version has to equal the declared `pyproject.toml` version *literally*,
+and the normalised PEP 440 form is what `uv version` writes (`0.4.2rc1`, not
+`0.4.2-rc.1`), so the version needs its own small PR on either side:
+
+```bash
+# 1. bump to the rc through a PR (chore(release) commits are skipped by the planner)
+uv version --package proxytool 0.4.2rc1 --no-sync
+
+# 2. tag the merged main and let CI run
+git tag -a proxytool-v0.4.2rc1 -m "proxytool 0.4.2rc1 (rehearsal)"
+git push origin proxytool-v0.4.2rc1
+
+# 3. restore the released version through a second PR, so the planner's next
+#    patch bump is 0.4.2 again rather than burning it on 0.4.3
+uv version --package proxytool 0.4.1 --no-sync
+```
+
+Expect two pauses: the `testpypi` and `pypi` environments are approval-gated, so
+the upload job waits for a reviewer, and the run leaves a prerelease on the
+repo. Clean up after a rehearsal with
+`gh release delete proxytool-v0.4.2rc1 --cleanup-tag`.
+
+For a check that touches no index at all, dispatch `publish.yml` by hand on a
+branch: `prepare` reads both declared versions, `build` runs, and both publish
+jobs are skipped because they require `ref_type == 'tag'`.
 
 ## Notes & gotchas
 
