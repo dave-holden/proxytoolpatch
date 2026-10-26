@@ -3,8 +3,27 @@
 ## PRs & branch protection
 
 `main` is protected on the hosted repo (`github.com/dave-holden/proxytoolpatch`
-— remote `origin`): changes land through a PR, and merging requires the `lint`,
-`test-matrix (…)` and `pyright` checks from `.github/workflows/test.yml`.
+— remote `origin`). Note it is a **ruleset** (`Settings → Rules → Rulesets`,
+named `General`, target `refs/heads/main`), not the older classic branch
+protection: the REST path `branches/main/protection` returns 404 here. Changes
+land through a PR, and merging requires these three checks from
+`.github/workflows/test.yml`:
+
+| Required check | Job |
+|---|---|
+| `lint` | `lint` |
+| `pyright` | `pyright` (type-check on the 3.11 floor) |
+| `test-matrix (3.11, proxytool)` | one cell of the `test-matrix` job |
+
+The ruleset does not require branches to be up to date before merging and has
+no bypass actors (admins included). Only three checks are listed to keep the
+gate short; the rest of the matrix still runs and is still visible on the PR.
+
+**The requirement names the new floor**, so changing the Python matrix means
+editing the ruleset too — `test-matrix (3.10, proxytool)` outlived the 3.10 row
+and blocked every PR until it was renamed (the check never reports, so it is
+not "missing", it is permanently pending).
+
 Recreate these settings if the repo is ever set up again:
 
 1. Create the GitHub repo and add the remote:
@@ -13,15 +32,19 @@ Recreate these settings if the repo is ever set up again:
    git push -u origin main
    ```
 
-2. In *Settings → Branches → Add branch protection rule* for `main`:
+2. In *Settings → Rules → Rulesets → New branch ruleset*, targeting `main`:
+
+  - Enforcement **Active**, empty bypass list
 
   - ✅ Require a pull request before merging
-  - ✅ Require status checks: `lint`, `test-matrix (…)`, `pyright`
-     (from `.github/workflows/test.yml` — they appear after the first PR run)
 
-  - ✅ Require branches to be up to date before merging
+  - ✅ Require status checks: `lint`, `pyright`, `test-matrix (3.11, proxytool)`
+     (they appear in the picker after the first PR run)
 
-  - ✅ Do not allow bypassing (applies to admins too)
+  - ✅ Restrict deletions, ✅ Block force pushes
+
+  - Leave *Require branches to be up to date* **off**: the matrix is slow and
+     the required checks are cheap to reason about on a stale base.
 
 
 3. From then on, work on feature branches and open PRs; `main` is push-protected:
