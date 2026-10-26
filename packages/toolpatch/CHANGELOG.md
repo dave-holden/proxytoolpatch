@@ -5,6 +5,21 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.5.0] - 2026-10-26
+
+### Other Changes
+
+- Drop Python 3.10 support to clear the six filelock advisories (#26) ([`1926e33`](https://github.com/dave-holden/proxytoolpatch/commit/1926e331a22e800c76267276595241e26b944abd))
+
+[toolpatch-v0.4.2...toolpatch-v0.5.0](https://github.com/dave-holden/proxytoolpatch/compare/toolpatch-v0.4.2...toolpatch-v0.5.0)
+
+## [0.4.2] - 2026-10-26
+
+### Other Changes
+
+- Declare MIT license; document the no-Codebuff rule for agents ([`4b420d7`](https://github.com/dave-holden/proxytoolpatch/commit/4b420d796dac725ad33aad0b562db3064711eb1f))
+- Consolidate images under root public/ and trim the READMEs ([`cc3e16a`](https://github.com/dave-holden/proxytoolpatch/commit/cc3e16ab619a95e397dd2ed01c4a35bc6701e30d))
+
 ## [0.4.2] - 2026-10-26
 
 ### Other Changes
