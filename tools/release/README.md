@@ -70,6 +70,21 @@ from the GitHub API as well.
 
 1. Ordinary development: conventional commits (`feat: …`, `fix(scope): …`,
    `!:`/`BREAKING CHANGE` for breaking).
+
+   **The commit the planner reads after a squash merge is the PR title.**
+   GitHub offers the PR title as the squash subject, so a branch full of
+   conventional commits lands as one unconventional commit if the title is
+   prose: `Drop Python 3.10 support` was classified as a *patch* even though
+   its branch commit was `feat(proxytool,toolpatch)!: drop Python 3.10 support`.
+   Either title the PR after its conventional commit, or pass the subject
+   explicitly:
+
+   ```bash
+   gh pr merge --squash --subject "feat(proxytool,toolpatch)!: drop Python 3.10 support"
+   ```
+
+   The PR body becomes the commit body, so a `BREAKING CHANGE:` footer there
+   also marks the release as breaking.
 2. `tools/release/plan.py` (or just let `release-pr.yml` do it) bumps versions
    and opens `release/next` — breaking → major, `feat` → minor, everything
    else → patch, per package and independently. While a package is still 0.x a
