@@ -100,5 +100,7 @@ Run the project's configured tests and lint/type checks using its documented dev
 
 ## Related documentation
 
+- [Step-by-Step](../../docs/step-by-step.md)
+- [Compatibility matrix](../../docs/compatibility.md)
 - [Repository overview and screenshots](../../README.md)
 - [Reusable tool-patching package](../../packages/toolpatch/README.md)

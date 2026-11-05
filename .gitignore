@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv/
 .idea/
+.project-mcp
 .pytest_cache/
 .ruff_cache/
 .coverage
@@ -49,8 +50,10 @@ coverage.xml
 # Catch-all for stray logs
 *.log
 
-# Ignored root work zones (local scratch + local docs, now prepared for
-# user-facing docs/; all dev material lives in the untracked dev/)
-docs/
+# Ignored root work zones: scratch + all dev material stays untracked
+# (docs/ is now tracked user-facing documentation)
 tmp/
 dev/
+
+# Machine-specific working notes (absolute paths, local models and clients)
+apps/proxytool/Beginner-Instructions/
