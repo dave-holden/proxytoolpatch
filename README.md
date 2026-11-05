@@ -71,6 +71,8 @@ It may also be useful with other clients and servers that speak a compatible API
 
 - [Proxy application: setup, configuration and troubleshooting](apps/proxytool/README.md)
 - [Tool-patching package: repair logic and development notes](packages/toolpatch/README.md)
+- [Server & client compatibility matrix: how each local server/agent pair behaves behind proxytool](docs/compatibility.md)
+- [Step-by-step guide: from one server and one client to proxytool in the middle](docs/step-by-step.md)
 - [Development workflow: gates, test matrix, publish and release rehearsal](DEVELOPMENT.md)
 
 ## Contributing
