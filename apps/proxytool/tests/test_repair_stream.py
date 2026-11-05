@@ -399,3 +399,50 @@ def test_stream_multibyte_char_split_across_chunks(client, monkeypatch):
         if line.startswith("data: ") and line != "data: [DONE]"
     )
     assert content == text
+
+
+def test_stream_native_tool_call_deltas_pass_through(client, mock_upstream):
+    """Upstreams that already stream structured calls must not be re-parsed.
+
+    llama.cpp with --jinja native tool support sends `delta.tool_calls`
+    fragments instead of leaking text. Feeding those to the healer drops them
+    (it only repairs content), which collapses the turn into an empty
+    assistant message for the client.
+    """
+    body = {
+        "model": "qwen",
+        "stream": True,
+        "messages": [{"role": "user", "content": "list files"}],
+        "tools": [TOOL],
+    }
+    native = [
+        {"index": 0, "id": "call_abc", "type": "function",
+         "function": {"name": "list_dir", "arguments": "{\"path\""}},
+        {"index": 0, "function": {"arguments": ": \".\"}"}},
+    ]
+    sse = _sse(
+        {"choices": [{"delta": {"role": "assistant", "tool_calls": [native[0]]}}]},
+        {"choices": [{"delta": {"tool_calls": [native[1]]}}]},
+        {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+    )
+    mock_upstream.post("/v1/chat/completions").respond(
+        status_code=200, content=sse,
+        headers={"content-type": "text/event-stream"},
+    )
+
+    res = client.post("/v1/chat/completions", json=body)
+    assert res.status_code == 200
+
+    deltas: list[dict] = []
+    content_text = ""
+    for line in res.text.splitlines():
+        if not line.startswith("data: ") or line == "data: [DONE]":
+            continue
+        delta = json.loads(line[6:])["choices"][0]["delta"]
+        deltas += delta.get("tool_calls") or []
+        content_text += delta.get("content") or ""
+
+    assert [d["index"] for d in deltas] == [0, 0]
+    assert deltas[0] == native[0]
+    assert deltas[1] == native[1]
+    assert content_text == ""

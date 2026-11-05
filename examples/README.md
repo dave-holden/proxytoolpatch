@@ -16,6 +16,7 @@ Ports, startup order and the per-server commands live in `dev/RIG.md`
 | [`opencode/opencode-swap.jsonc`](opencode/opencode-swap.jsonc) | opencode client listing all four models (three swap-demo + the oMLX Phi) | `OPENCODE_CONFIG=./examples/opencode/opencode-swap.jsonc` |
 | [`pi/models.json`](pi/models.json) | pi client provider + four model aliases (`qwen-gguf`, `qwen-mlx`, `phi-4-mini`, `phi-4-mini-mlx`) through the proxy | `~/.pi/agent/models.json` (or `$PI_CODING_AGENT_DIR/models.json`) |
 | [`llama-swap/config.yml`](llama-swap/config.yml) | llama-swap gateway: three models in one swap group, spawned on demand | `llama-swap --config examples/llama-swap/config.yml` |
+| [`toolpatch-before-after.py`](toolpatch-before-after.py) | No proxy process: one leaked reply repaired by `toolpatch` directly, non-streaming and streamed | `python examples/toolpatch-before-after.py` |
 
 ## Three-model swap demo
 
