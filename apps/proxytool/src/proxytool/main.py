@@ -411,6 +411,16 @@ async def _streaming(request: Request, payload: dict[str, Any],
                     delta = choice.get("delta") or {}
                     if first_role is None and delta.get("role"):
                         first_role = delta["role"]
+                    native_tools = delta.get("tool_calls")
+                    if native_tools:
+                        # Upstream already streams structured tool calls
+                        # (llama.cpp --jinja native mode): forward the deltas
+                        # verbatim instead of feeding the healer, which only
+                        # repairs the text-leak shapes. Clients aggregate
+                        # OpenAI tool-call deltas by their `index`.
+                        yield _ev_json({"type": "tool_calls",
+                                        "tool_calls": native_tools})
+                        continue
                     text = delta.get("content")
                     if not text:
                         continue
