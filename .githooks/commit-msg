@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# commit-msg — reject AI-tool attribution in a commit message.
+#
+# Why a gate and not just a convention: GitHub keeps every pull-request head in
+# `refs/pull/*` forever, so a `Generated with …` footer removed by a later
+# history rewrite stays fetchable by anyone with repository access. Preventing
+# the message from existing is the only reliable control.
+#
+# Wired in via `core.hooksPath .githooks` (see .githooks/install.sh), so this
+# runs for every commit except `git commit --no-verify`. The CI job
+# "commit attribution gate" in .github/workflows/test.yml is the control that
+# cannot be skipped that way.
+#
+# Fails closed when node is missing: a silently skipped guard is the failure
+# mode this hook exists to prevent.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "✕ Commit attribution guard: node not found, so the message was NOT checked." >&2
+  echo "  Install Node (brew install node), or commit with --no-verify at your own risk." >&2
+  exit 1
+fi
+
+node scripts/check-commit-attribution.mjs "$1"
