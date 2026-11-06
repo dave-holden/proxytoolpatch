@@ -5,12 +5,11 @@
  *
  * GitHub keeps every pull-request head in `refs/pull/*` permanently, so a
  * footer removed by rewriting history stays fetchable by anyone with repository
- * access. Prevention is therefore the only reliable control (see the
- * "Old commit messages inside refs/pull/*" section of
- * `.agents/repo-hardening.md`): this rejects a message as it is written, and CI
- * rejects the tip of a pushed branch.
+ * access. Prevention is therefore the only reliable control: this rejects a
+ * message as it is written, and CI rejects the tip of a pushed branch.
  *
- * The rule is the one in AGENTS.md: a commit message ends at its own last line.
+ * The rule is the one in `.agents/instructions.md`: a commit message ends at its
+ * own last line.
  * No `Generated with …`, no `🤖`, and no `Co-Authored-By:` / `Signed-off-by:`
  * trailer naming an AI tool. Merge commits are covered by the same rule — a
  * squash-merged PR body lands in the message. An automated service signing off
@@ -69,14 +68,22 @@ const RULES = [
 
 const RULE_SUMMARY = 'a message must end at its own last line: no `Generated with …`, no 🤖, no AI-tool trailer'
 
+/** Git's cut line in a `commit -v` message; everything from it on is the diff. */
+const SCISSORS = /^#\s*-{2,}\s*>8\s*-{2,}\s*$/
+
 /**
- * Findings for one message. Comment lines are ignored: git's COMMIT_EDITMSG
- * template is mostly comments, and the scissors line marks anything below the
- * cut as not part of the message.
+ * Findings for one message. Comment lines are ignored, since git's
+ * COMMIT_EDITMSG template is mostly comments. Everything from the scissors line
+ * on is ignored too: `git commit -v` appends the diff there, git drops it before
+ * recording the message, and a diff that merely mentions a footer must not
+ * block the commit.
  */
 function check(message) {
+  const lines = message.split('\n')
+  const cut = lines.findIndex(line => SCISSORS.test(line.trim()))
+  const checked = cut < 0 ? lines : lines.slice(0, cut)
   const findings = []
-  message.split('\n').forEach((line, index) => {
+  checked.forEach((line, index) => {
     if (/^\s*#/.test(line)) return
     for (const rule of RULES) {
       if (rule.test(line)) findings.push({ rule, line: line.trim(), number: index + 1 })
