@@ -260,7 +260,7 @@ Bypass the proxy whenever you want client→server directly: pi (second entry in
 | Server respawns nothing / dies when your agent session ends | process spawned inside a sandboxed session gets reaped | run in your own terminal; `launchd` for permanence |
 | `[mem] MLX buffer-pool cap 2048 MB (was 31129 MB)` at boot | server clamps pool to free GPU memory at boot | free RAM, restart; or `MLX_SERVE_GPU_CEILING_MB=16384` (over-commit can crash) |
 | 503 `Not enough free memory to load model: needs ~9.7 GB` | second 14B while one is resident (mlx-serve has **no unload endpoint**) | restart the server, or load one 14B at a time; `--skip-mem-preflight` only at own risk |
-| `unsupported model_type 'phi3'` at boot | MLX architecture not implemented in the build | use the model's GGUF on `llama.cpp`/`llama-server` instead |
+| `unsupported model_type '<arch>'` at boot | MLX architecture not implemented in the build (the quoted name is the family in the model's `config.json`) | use the model's GGUF on `llama.cpp`/`llama-server` instead |
 | llama.cpp returns tool JSON as plain `<tools>` text | GGUF/chat-template dialect, no structured contract | proxytool in front ✅ |
 | llama-swap MLX backend: 500 `upstream command exited prematurely` | macro called the `mlx_lm` CLI | use `mlx_lm.server` in the macro ✅ |
 | `Repository Not Found … api/models/qwen2.5-coder-14b-4bit` | mlx-lm resolves the client id against HF | register the model under the full HF repo id ✅ (and/or proxytool `model_map`) |
