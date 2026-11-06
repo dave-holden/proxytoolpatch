@@ -5,6 +5,14 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.5.3] - 2026-11-06
+
+### Bug Fixes
+
+- **repair**: Stop reporting a native tool call twice (#38) ([`ed9b4d0`](https://github.com/dave-holden/proxytoolpatch/commit/ed9b4d0c250aec60f0d1c374d57681dc0452df2d))
+
+[proxytool-v0.5.1...proxytool-v0.5.3](https://github.com/dave-holden/proxytoolpatch/compare/proxytool-v0.5.1...proxytool-v0.5.3)
+
 ## [0.5.2] - 2026-11-06
 
 ### Documentation
