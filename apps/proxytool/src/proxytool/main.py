@@ -340,6 +340,23 @@ async def _non_streaming(payload: dict[str, Any],
     return JSONResponse(content=data, status_code=upstream.status_code)
 
 
+def _call_key(call: dict[str, Any]) -> tuple[str, str]:
+    """Identity of a tool call for de-duplication: name + parsed arguments.
+
+    Arguments arrive as a JSON *string*, and the same call can be spelled with
+    or without spaces (``{"city":"Paris"}`` vs ``{"city": "Paris"}``), so
+    compare the parsed form rather than the raw text.
+    """
+    fn = call.get("function") or {}
+    args = fn.get("arguments")
+    try:
+        normalised = json.dumps(json.loads(args) if isinstance(args, str) else args,
+                                sort_keys=True)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        normalised = str(args)
+    return (str(fn.get("name")), normalised)
+
+
 def _repair_response(data: dict[str, Any], tool_names: set[str] | None) -> bool:
     """Rewrite leaked tool calls inside data in place. True if repaired."""
     repaired = False
@@ -352,8 +369,21 @@ def _repair_response(data: dict[str, Any], tool_names: set[str] | None) -> bool:
         if ex is None:
             continue
         message["content"] = ex.content
+        # The same call can arrive twice: once as a native `tool_calls` entry
+        # (llama.cpp --jinja) and once as the raw dialect left behind in
+        # `content`. Appending blindly would make the client run it twice, so
+        # add only the calls that are not already present. A leaked call for a
+        # *different* tool is still promoted — that is a genuine second call.
         existing = message.get("tool_calls") or []
-        message["tool_calls"] = existing + ex.tool_calls
+        seen = {_call_key(c) for c in existing}
+        added = []
+        for call in ex.tool_calls:
+            key = _call_key(call)
+            if key not in seen:
+                seen.add(key)
+                added.append(call)
+        if existing or added:
+            message["tool_calls"] = existing + added
         choice["message"] = message
         repaired = True
     return repaired
