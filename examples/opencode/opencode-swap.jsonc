@@ -21,11 +21,11 @@
         "qwen-mlx": {
           "name": "Qwen2.5-Coder-14B (MLX)"
         },
-        "phi-4-mini": {
-          "name": "Phi-4-mini Q5_K_M (GGUF)"
+        "qwen2.5-0.5b-instruct-gguf": {
+          "name": "Qwen2.5-0.5B-Instruct GGUF (q4_k_m)"
         },
-        "phi-4-mini-mlx": {
-          "name": "Phi-4-mini 4bit (MLX, oMLX)"
+        "qwen2.5-0.5b-4bit": {
+          "name": "Qwen2.5-0.5B-Instruct-4bit (MLX, oMLX)"
         }
       }
     }
@@ -33,7 +33,7 @@
 
   // ids match the llama-swap model keys (or the mode-2 routing entries)
   "model": "proxytool/qwen-gguf",
-  "small_model": "proxytool/phi-4-mini",
+  "small_model": "proxytool/qwen2.5-0.5b-instruct-gguf",
   "mcp": {},
   "plugin": []
 }

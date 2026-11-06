@@ -37,7 +37,7 @@ timeout = 600             # seconds; covers llama-swap cold model swaps
 
 # ── client alias → real model id ─────────────────────────────────────────────
 # Not needed for the three-model swap demo: llama-swap's keys
-# (qwen-gguf, qwen-mlx, phi-4-mini) are already the ids the clients send,
+# (qwen-gguf, qwen-mlx, qwen2.5-0.5b-instruct-gguf) are already the ids the clients send,
 # so they pass through untouched. Add a map only if the upstream ids differ
 # from the client ids (mlx_lm.server would otherwise resolve an unknown id
 # against HF and return "Repository Not Found"):
