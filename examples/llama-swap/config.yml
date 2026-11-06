@@ -6,15 +6,15 @@
 #   brew install llama.cpp        # provides `llama` (GGUF backends: `llama serve`)
 #   uv tool install mlx-lm        # provides mlx_lm.server (MLX backend)
 #
-# Prefetch Phi once (otherwise the first swap also downloads ~5 GB):
-#   hf download bartowski/microsoft_Phi-4-mini-instruct-GGUF \
-#     --include '*Q5_K_M.gguf'
+# Prefetch the small Qwen once (otherwise the first swap also downloads ~500 MB):
+#   hf download Qwen/Qwen2.5-0.5B-Instruct-GGUF \
+#     --include '*q4_k_m.gguf'
 #
 # The YAML keys ARE the model ids clients send, so proxytool, pi and
 # opencode use them verbatim — no proxytool --model-map is required.
 # Rename a key here and you must update the client configs to match.
 
-healthCheckTimeout: 500   # 14B cold load; also covers a first Phi load
+healthCheckTimeout: 500   # 14B cold load; plenty for the 0.5B too
 logLevel: info
 globalTTL: 120            # seconds idle before unload (makes swaps visible)
 
@@ -37,12 +37,12 @@ models:
       mlx_lm.server --host 127.0.0.1 --port ${PORT}
       --model mlx-community/Qwen2.5-Coder-14B-Instruct-4bit
 
-  phi-4-mini:
+  qwen2.5-0.5b-instruct-gguf:
     cmd: >
       llama serve --host 127.0.0.1 --port ${PORT}
-      -c 16384 -ngl 999 --jinja -a phi-4-mini
-      -hf bartowski/microsoft_Phi-4-mini-instruct-GGUF
-      --hf-file microsoft_Phi-4-mini-instruct-Q5_K_M.gguf
+      -c 8192 -ngl 999 --jinja -a qwen2.5-0.5b-instruct-gguf
+      -hf Qwen/Qwen2.5-0.5B-Instruct-GGUF
+      --hf-file qwen2.5-0.5b-instruct-q4_k_m.gguf
 
 # One member resident at a time: asking for another model evicts the current
 # one. (`exclusive: true` also unloads anything outside this group.)
@@ -57,4 +57,4 @@ routing:
           members:
             - "qwen-gguf"
             - "qwen-mlx"
-            - "phi-4-mini"
+            - "qwen2.5-0.5b-instruct-gguf"
