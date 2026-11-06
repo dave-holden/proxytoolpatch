@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()      # <tool_call>
-CLOSE_TAG = bytes.fromhex("3c2f746f6f6c5f63616c6c3e").decode()   # \n
+OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()  # <tool_call>
+CLOSE_TAG = bytes.fromhex("3c2f746f6f6c5f63616c6c3e").decode()  # \n
 LEAKED = OPEN_TAG + '{"name": "list_dir", "arguments": {"path": "."}}' + CLOSE_TAG
 
 TOOL = {
@@ -13,9 +13,10 @@ TOOL = {
 
 
 def _sse(*payloads: dict) -> bytes:
-    return b"".join(
-        f"data: {json.dumps(p, separators=(',', ':'))}\n\n".encode() for p in payloads
-    ) + b"data: [DONE]\n\n"
+    return (
+        b"".join(f"data: {json.dumps(p, separators=(',', ':'))}\n\n".encode() for p in payloads)
+        + b"data: [DONE]\n\n"
+    )
 
 
 def _delta(text: str) -> dict:
@@ -30,10 +31,11 @@ def test_stream_leak_repaired(client, mock_upstream):
         "tools": [TOOL],
     }
     # Simulate Qwen streaming the leak in 3-char chunks like mlx/llama servers do.
-    chunks = [LEAKED[i:i + 3] for i in range(0, len(LEAKED), 3)]
+    chunks = [LEAKED[i : i + 3] for i in range(0, len(LEAKED), 3)]
     sse = _sse(*(_delta(c) for c in chunks))
     mock_upstream.post("/v1/chat/completions").respond(
-        status_code=200, content=sse,
+        status_code=200,
+        content=sse,
         headers={"content-type": "text/event-stream"},
     )
 
@@ -73,27 +75,24 @@ def test_stream_meta_and_usage_forwarded(client, mock_upstream):
         "messages": [{"role": "user", "content": "hi"}],
         "tools": [TOOL],
     }
-    sse = (
-        _sse(
-            {
-                "id": "chatcmpl-x1",
-                "created": 1700000000,
-                "model": "qwen",
-                "choices": [{"delta": {"content": "A"}}],
-            },
-            {
-                "id": "chatcmpl-x1",
-                "created": 1700000000,
-                "model": "qwen",
-                "choices": [
-                    {"delta": {}, "finish_reason": "stop"}
-                ],
-                "usage": {"prompt_tokens": 3, "completion_tokens": 1},
-            },
-        )
+    sse = _sse(
+        {
+            "id": "chatcmpl-x1",
+            "created": 1700000000,
+            "model": "qwen",
+            "choices": [{"delta": {"content": "A"}}],
+        },
+        {
+            "id": "chatcmpl-x1",
+            "created": 1700000000,
+            "model": "qwen",
+            "choices": [{"delta": {}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 1},
+        },
     )
     mock_upstream.post("/v1/chat/completions").respond(
-        status_code=200, content=sse,
+        status_code=200,
+        content=sse,
         headers={"content-type": "text/event-stream"},
     )
     res = client.post("/v1/chat/completions", json=body)
@@ -120,7 +119,8 @@ def test_stream_unterminated_upstream_gets_synthetic_stop(client, mock_upstream)
     }
     sse = _sse(_delta("plain answer"))  # no finish_reason, no usage
     mock_upstream.post("/v1/chat/completions").respond(
-        status_code=200, content=sse,
+        status_code=200,
+        content=sse,
         headers={"content-type": "text/event-stream"},
     )
     res = client.post("/v1/chat/completions", json=body)
@@ -142,7 +142,8 @@ def test_stream_upstream_error_becomes_clean_sse_finish(client, mock_upstream):
         "tools": [TOOL],
     }
     mock_upstream.post("/v1/chat/completions").respond(
-        status_code=404, content='{"error": "Repository Not Found for url: m"}',
+        status_code=404,
+        content='{"error": "Repository Not Found for url: m"}',
         headers={"content-type": "application/json"},
     )
     res = client.post("/v1/chat/completions", json=body)
@@ -170,8 +171,10 @@ def test_mlx_backend_strips_tool_choice_and_maps_model(client, monkeypatch):
         '{"qwen-mlx": "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"}',
     )
     from proxytool import settings as settings_mod
+
     importlib.reload(settings_mod)
     import proxytool.main as main_mod
+
     importlib.reload(main_mod)  # pick up reloaded settings + fresh conduit settings
 
     captured: dict = {}
@@ -227,8 +230,10 @@ def test_mlx_detected_through_model_map_alias(client, monkeypatch):
         '{"qwen": "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"}',
     )
     from proxytool import settings as settings_mod
+
     importlib.reload(settings_mod)
     import proxytool.main as main_mod
+
     importlib.reload(main_mod)
 
     captured: dict = {}
@@ -241,19 +246,21 @@ def test_mlx_detected_through_model_map_alias(client, monkeypatch):
             text = ""
 
             def json(self):
-                return {"choices": [{"message": {"role": "assistant",
-                                                 "content": "ok"}}]}
+                return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
 
         return _Resp()
 
     monkeypatch.setattr(main_mod.conduit, "forward_json", fake_forward_json)
 
-    res = client.post("/v1/chat/completions", json={
-        "model": "qwen",
-        "messages": [{"role": "user", "content": "hi"}],
-        "tools": [TOOL],
-        "tool_choice": "auto",
-    })
+    res = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "qwen",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [TOOL],
+            "tool_choice": "auto",
+        },
+    )
     assert res.status_code == 200
     assert "tool_choice" not in captured, "mlx dialect must be detected via the map"
     assert captured["model"] == "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
@@ -267,12 +274,15 @@ def test_unknown_fields_forwarded_verbatim(client, mock_upstream):
     mock_upstream.post("/v1/chat/completions").respond(
         200, json={"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
     )
-    res = client.post("/v1/chat/completions", json={
-        "model": "qwen",
-        "messages": [{"role": "user", "content": "hi"}],
-        "mode": "review",
-        "profile": "coder",
-    })
+    res = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "qwen",
+            "messages": [{"role": "user", "content": "hi"}],
+            "mode": "review",
+            "profile": "coder",
+        },
+    )
     assert res.status_code == 200
     sent = json.loads(mock_upstream.calls[-1].request.content)
     assert sent["mode"] == "review"
@@ -288,7 +298,8 @@ def test_stream_plain_answer_not_mangled(client, mock_upstream):
     }
     sse = _sse(_delta("Hello "), _delta("there!"))
     mock_upstream.post("/v1/chat/completions").respond(
-        status_code=200, content=sse,
+        status_code=200,
+        content=sse,
         headers={"content-type": "text/event-stream"},
     )
 
@@ -345,8 +356,12 @@ def test_stream_frame_split_mid_json(client, monkeypatch):
     monkeypatch.setattr(main_mod.conduit, "forward_stream", fake_forward_stream)
     res = client.post(
         "/v1/chat/completions",
-        json={"model": "qwen", "stream": True,
-              "messages": [{"role": "user", "content": "hi"}], "tools": [TOOL]},
+        json={
+            "model": "qwen",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [TOOL],
+        },
     )
     assert res.status_code == 200
     content = "".join(
@@ -364,11 +379,15 @@ def test_stream_multibyte_char_split_across_chunks(client, monkeypatch):
     text = "héllo 地球"
     # ensure_ascii=False: emit raw multi-byte UTF-8, as llama-server/mlx do
     # (\u escapes would make byte-splitting unreachable).
-    payload = "data: " + json.dumps(
-        {"choices": [{"delta": {"content": text}}]},
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ) + "\n\ndata: [DONE]\n\n"
+    payload = (
+        "data: "
+        + json.dumps(
+            {"choices": [{"delta": {"content": text}}]},
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        + "\n\ndata: [DONE]\n\n"
+    )
     raw = payload.encode("utf-8")
     # Split exactly inside a multibyte character: locate 'é's 0xC3 lead byte
     # and cut between it and its continuation byte.
@@ -388,8 +407,12 @@ def test_stream_multibyte_char_split_across_chunks(client, monkeypatch):
     monkeypatch.setattr(main_mod.conduit, "forward_stream", fake_forward_stream)
     res = client.post(
         "/v1/chat/completions",
-        json={"model": "qwen", "stream": True,
-              "messages": [{"role": "user", "content": "hi"}], "tools": [TOOL]},
+        json={
+            "model": "qwen",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [TOOL],
+        },
     )
     assert res.status_code == 200
     assert "\ufffd" not in res.text, "replacement char must not leak into content"
@@ -416,9 +439,13 @@ def test_stream_native_tool_call_deltas_pass_through(client, mock_upstream):
         "tools": [TOOL],
     }
     native = [
-        {"index": 0, "id": "call_abc", "type": "function",
-         "function": {"name": "list_dir", "arguments": "{\"path\""}},
-        {"index": 0, "function": {"arguments": ": \".\"}"}},
+        {
+            "index": 0,
+            "id": "call_abc",
+            "type": "function",
+            "function": {"name": "list_dir", "arguments": '{"path"'},
+        },
+        {"index": 0, "function": {"arguments": ': "."}'}},
     ]
     sse = _sse(
         {"choices": [{"delta": {"role": "assistant", "tool_calls": [native[0]]}}]},
@@ -426,7 +453,8 @@ def test_stream_native_tool_call_deltas_pass_through(client, mock_upstream):
         {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
     )
     mock_upstream.post("/v1/chat/completions").respond(
-        status_code=200, content=sse,
+        status_code=200,
+        content=sse,
         headers={"content-type": "text/event-stream"},
     )
 

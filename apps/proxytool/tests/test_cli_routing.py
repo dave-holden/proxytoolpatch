@@ -15,28 +15,27 @@ class TestBackendRouter:
 
     def test_model_list_match_wins(self) -> None:
         r = BackendRouter()
-        r.register(Backend(name="gguf", url="http://127.0.0.1:8181",
-                           models=("qwen-gguf",)))
-        r.register(Backend(name="mlx", url="http://127.0.0.1:8281",
-                           models=("qwen-mlx",), default=True))
+        r.register(Backend(name="gguf", url="http://127.0.0.1:8181", models=("qwen-gguf",)))
+        r.register(
+            Backend(name="mlx", url="http://127.0.0.1:8281", models=("qwen-mlx",), default=True)
+        )
         d = r.route("qwen-mlx")
         assert d.backend.name == "mlx"
         assert d.matched_by == "model-list"
 
     def test_default_used_when_no_model_list_match(self) -> None:
         r = BackendRouter()
-        r.register(Backend(name="gguf", url="http://127.0.0.1:8181",
-                           models=("qwen-gguf",)))
-        r.register(Backend(name="mlx", url="http://127.0.0.1:8281",
-                           models=("qwen-mlx",), default=True))
+        r.register(Backend(name="gguf", url="http://127.0.0.1:8181", models=("qwen-gguf",)))
+        r.register(
+            Backend(name="mlx", url="http://127.0.0.1:8281", models=("qwen-mlx",), default=True)
+        )
         d = r.route("something-else")
         assert d.backend.name == "mlx"
         assert d.matched_by == "default"
 
     def test_routing_is_case_insensitive(self) -> None:
         r = BackendRouter()
-        r.register(Backend(name="gguf", url="http://127.0.0.1:8181",
-                           models=("Qwen-GGUF",)))
+        r.register(Backend(name="gguf", url="http://127.0.0.1:8181", models=("Qwen-GGUF",)))
         assert r.route("qwen-gguf").backend.name == "gguf"
 
     def test_no_backends_raises(self) -> None:

@@ -56,9 +56,7 @@ def _proxytool_live() -> bool:
 
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("PTP_LIVE") != "1"
-    or not _opencode_available()
-    or not _proxytool_live(),
+    os.environ.get("PTP_LIVE") != "1" or not _opencode_available() or not _proxytool_live(),
     reason="PTP_LIVE=1 not set, opencode CLI missing, or proxytool not running",
 )
 
@@ -101,8 +99,10 @@ def _run_opencode(workdir: Path, env: dict[str, str]) -> list[dict]:
             OPENCODE_BIN,
             "run",
             PROMPT,
-            "--format", "json",
-            "--dir", str(projdir),
+            "--format",
+            "json",
+            "--dir",
+            str(projdir),
             "--print-logs",
         ],
         env=env,
@@ -146,19 +146,16 @@ def test_opencode_agent_lists_dir():
         #    (opencode brings its own tools — bash/read/edit — so the model
         #    will not call our list_dir; what matters is that a structured
         #    tool call survived opencode's stream parser at all.)
-        tool_parts = [
-            e.get("part") for e in events
-            if str(e.get("type", "")).lower() == "tool_use"
-        ]
+        tool_parts = [e.get("part") for e in events if str(e.get("type", "")).lower() == "tool_use"]
         assert tool_parts, (
             f"no tool_use events in opencode run — got types: "
             f"{sorted({str(e.get('type', '')) for e in events})}\n"
             f"events tail: {json.dumps(events[-3:])[:800]}"
         )
         completed = [
-            p for p in tool_parts
-            if isinstance(p, dict)
-            and (p.get("state") or {}).get("status") == "completed"
+            p
+            for p in tool_parts
+            if isinstance(p, dict) and (p.get("state") or {}).get("status") == "completed"
         ]
         assert completed, f"tool_use events never completed: {json.dumps(tool_parts)[:600]}"
 
@@ -170,7 +167,10 @@ def test_opencode_no_leak_plain_question():
         env, _ = _make_opencode_env(workdir)
         proc = subprocess.run(
             [OPENCODE_BIN, "run", "Say exactly: RIGOK", "--format", "json"],
-            env=env, capture_output=True, text=True, timeout=300,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,
             cwd=str(workdir),
         )
         assert proc.returncode == 0, proc.stderr[-2000:]

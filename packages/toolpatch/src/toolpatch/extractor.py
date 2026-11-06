@@ -47,12 +47,20 @@ CallSource = Literal["hermes", "fenced", "raw_json", "mixed"]
 # `<function>{...}</function>` depending on the chat template it was loaded
 # with; MLX builds use `<function-call>`. All of them are leak syntax.
 WRAPPER_TAGS = (
-    "tools", "functions", "function",
+    "tools",
+    "functions",
+    "function",
     # singular/plural, hyphen/underscore: the same model has been seen writing
     # `<function>`, `<function-call>` and `<function-calls>` on successive
     # prompts with one chat template loaded.
-    "tool_call", "tool_calls", "tool-call", "tool-calls",
-    "function_call", "function_calls", "function-call", "function-calls",
+    "tool_call",
+    "tool_calls",
+    "tool-call",
+    "tool-calls",
+    "function_call",
+    "function_calls",
+    "function-call",
+    "function-calls",
 )
 _WRAPPER_OPEN_RE = re.compile(
     r"<\s*(" + "|".join(re.escape(t) for t in WRAPPER_TAGS) + r")\s*>\s*$"
@@ -62,7 +70,7 @@ _WRAPPER_CLOSE = r"\s*</\s*{tag}\s*>"
 
 @dataclass(frozen=True)
 class ExtractedToolCalls:
-    content: str | None                 # cleaned content; None when nothing remains
+    content: str | None  # cleaned content; None when nothing remains
     tool_calls: list[dict] = field(default_factory=list)
     source: CallSource | None = None
 
@@ -122,8 +130,7 @@ def _absorb_wrapper(content: str, lo: int, hi: int) -> tuple[int, int]:
     return m.start(), (cm.end() if cm else hi)
 
 
-def _collect_all(content: str,
-                 tool_names: set[str] | None) -> ExtractedToolCalls | None:
+def _collect_all(content: str, tool_names: set[str] | None) -> ExtractedToolCalls | None:
     """Run every detector family and merge the distinct calls found.
 
     Multi-call turns — several Hermes blocks, parallel fenced blocks, or a
@@ -143,9 +150,7 @@ def _collect_all(content: str,
             if any(span[0] < e and s < span[1] for s, e, _, _ in found):
                 continue  # nested/overlapping: an outer family already claimed it
             parsed = _parse_candidate(regex, m)
-            if parsed is None or (
-                tool_names is not None and parsed["name"] not in tool_names
-            ):
+            if parsed is None or (tool_names is not None and parsed["name"] not in tool_names):
                 continue
             found.append((span[0], span[1], parsed, source))
     if not found:
@@ -169,17 +174,15 @@ def _collect_all(content: str,
         pos = e
     cleaned += tail
     calls = [_to_tool_call(parsed) for _, _, parsed, _ in found]
-    families_src: list[CallSource] = list(dict.fromkeys(
-        src for _, _, _, src in found))
+    families_src: list[CallSource] = list(dict.fromkeys(src for _, _, _, src in found))
     source: CallSource = families_src[0] if len(families_src) == 1 else "mixed"
-    log.debug("extract probed: %d call(s) from %s", len(calls),
-              "+".join(families_src))
+    log.debug("extract probed: %d call(s) from %s", len(calls), "+".join(families_src))
     return ExtractedToolCalls(content=cleaned or None, tool_calls=calls, source=source)
 
 
-def extract_tool_calls(content: str,
-                       tool_names: set[str] | None = None,
-                       allow_unterminated_hermes: bool = False) -> ExtractedToolCalls | None:
+def extract_tool_calls(
+    content: str, tool_names: set[str] | None = None, allow_unterminated_hermes: bool = False
+) -> ExtractedToolCalls | None:
     """Extract leaked tool calls; None when the content is clean (passthrough).
 
     Multiple distinct calls — Hermes, fenced, raw-JSON, in any mix — are

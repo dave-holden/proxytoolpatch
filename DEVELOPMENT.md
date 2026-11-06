@@ -62,7 +62,7 @@ plus the quality gate they run). Everything below works from a **fresh
 clone**:
 
 ```bash
-uv run nox -s lint        # ruff
+uv run nox -s lint        # ruff lint + format check
 uv run pytest             # full local test suite
 uv run nox -s coverage    # branch coverage over both modules (3.11 floor)
 FULL_MATRIX=1 git push    # run the whole 3.11–3.14 matrix in the pre-push gate (if wired)
@@ -77,13 +77,13 @@ runtime dependency (the proxy conduit imports it directly).
   ```bash
   ./.githooks/install.sh   # sets git config core.hooksPath .githooks
   ```
-  Thereafter every commit runs the reduced gate (ruff + default-python
-  pytest) and every push runs the same without extra scope.
+  Thereafter every commit runs the reduced gate (ruff lint + format check,
+  then default-python pytest) and every push runs the same without extra scope.
 
 ## Test matrix
 
 ```bash
-uv run nox -s lint                        # ruff only
+uv run nox -s lint                        # ruff lint + format check
 uv run nox -s pyright                     # type-check on the 3.11 floor (as CI)
 uv run nox -s test                        # full matrix: 2 modules × 3.11–3.14
 uv run nox -s coverage                    # branch coverage, local convenience
@@ -122,7 +122,7 @@ throwaway envs (exactly what CI runs).
 4. Extra options (run before/with the matrix, same sessions as CI):
 
    ```bash
-   uv run nox -s lint          # ruff (prereq: keep it green, it is a required check)
+   uv run nox -s lint          # ruff lint + format (prereq: keep it green, it is a required check)
    uv run nox -s pyright       # type-check on the 3.11 floor (as CI)
    uv run nox -s coverage      # branch coverage snapshot on the 3.11 floor
    ```

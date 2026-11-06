@@ -2,7 +2,7 @@
 
     uv run nox                       # default: lint + full matrix (2 modules x 4 Pythons)
     uv run nox -s test               # the matrix only
-    uv run nox -s lint               # ruff
+    uv run nox -s lint               # ruff lint + format check
     uv run nox -s pyright            # type-check on the 3.11 floor (as CI does)
     uv run nox -s 'test_toolpatch(python="3.11")'   # one module, one Python
     uv run nox -s 'test_proxytool(python="3.14")'
@@ -35,18 +35,30 @@ TEST_DIRS = {
 def _uv_pytest(session: nox.Session, python: str, tests_dir: str) -> None:
     """Run pytest for ``tests_dir`` under an isolated uv env for one Python."""
     session.run(
-        "uv", "run", "--python", python, "--isolated",
-        "--all-packages", "--no-sources", "--group", "dev",
-        "pytest", "-q", tests_dir,
+        "uv",
+        "run",
+        "--python",
+        python,
+        "--isolated",
+        "--all-packages",
+        "--no-sources",
+        "--group",
+        "dev",
+        "pytest",
+        "-q",
+        tests_dir,
         external=True,
     )
 
 
 @nox.session(python="3.13")
 def lint(session: nox.Session) -> None:
-    """Ruff over the whole workspace."""
+    """Ruff lint and format check over the whole workspace."""
     session.install("ruff>=0.14")
     session.run("ruff", "check", ".")
+    # Formatting is gated too, so the tree cannot drift from `ruff format`: the
+    # fix is always `uv run ruff format .`, never a hand-formatted diff.
+    session.run("ruff", "format", "--check", ".")
 
 
 @nox.session(venv_backend="none")
@@ -54,11 +66,25 @@ def coverage(session: nox.Session) -> None:
     """Branch coverage over both modules, measured on the 3.11 floor."""
     # --all-packages: the checker's env must contain the real dependencies
     # (fastapi, pydantic, …) for import resolution — not just the dev group.
-    argv = ["uv", "run", "--python", "3.11", "--isolated", "--all-packages",
-            "--group", "dev", "coverage", "run", "-m", "pytest", "-q"]
+    argv = [
+        "uv",
+        "run",
+        "--python",
+        "3.11",
+        "--isolated",
+        "--all-packages",
+        "--group",
+        "dev",
+        "coverage",
+        "run",
+        "-m",
+        "pytest",
+        "-q",
+    ]
     session.run(*argv, external=True)
-    session.run("uv", "run", "--group", "dev", "coverage", "report",
-                "--skip-covered", external=True)
+    session.run(
+        "uv", "run", "--group", "dev", "coverage", "report", "--skip-covered", external=True
+    )
 
 
 @nox.session(venv_backend="none")
@@ -66,8 +92,9 @@ def pyright(session: nox.Session) -> None:
     """Type-check on the lowest supported Python (3.11) — mirrors CI."""
     # --all-packages: the checker's env must contain the real dependencies
     # (fastapi, pydantic, …) for import resolution — not just the dev group.
-    session.run("uv", "run", "--python", "3.11", "--isolated",
-                "--all-packages", "pyright", external=True)
+    session.run(
+        "uv", "run", "--python", "3.11", "--isolated", "--all-packages", "pyright", external=True
+    )
 
 
 # Param name must literally be `python` so session IDs request the clean

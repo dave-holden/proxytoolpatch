@@ -21,7 +21,7 @@ def upstream_path(base_url: str, path: str) -> str:
     p = path.lstrip("/")
     b = base_url.rstrip("/")
     if b.endswith("/v1") and (p == "v1" or p.startswith("v1/")):
-        p = p[len("v1/"):]
+        p = p[len("v1/") :]
     return p
 
 
@@ -31,9 +31,7 @@ def upstream_url(base_url: str, path: str) -> str:
 
 
 class UpstreamConduit:
-    def __init__(self, base_url: str,
-                 timeout: float = 300.0,
-                 api_key: str = "") -> None:
+    def __init__(self, base_url: str, timeout: float = 300.0, api_key: str = "") -> None:
         self._base_url = base_url
         # SSE generations are long-lived: a single generous timeout applies to
         # the whole request (llama-swap cold-start model loads included).
@@ -51,14 +49,11 @@ class UpstreamConduit:
     @staticmethod
     def forwardable(headers: dict[str, str]) -> dict[str, str]:
         """Client headers worth forwarding (auth, routing, trace ids)."""
-        return {
-            k: v for k, v in headers.items()
-            if k.lower() not in _DROP_HEADERS and v
-        }
+        return {k: v for k, v in headers.items() if k.lower() not in _DROP_HEADERS and v}
 
-    async def forward_json(self, path: str, payload: dict[str, Any],
-                           headers: dict[str, str] | None = None
-                           ) -> httpx.Response:
+    async def forward_json(
+        self, path: str, payload: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> httpx.Response:
         async with self.client() as client:
             return await client.post(
                 upstream_path(self._base_url, path),
@@ -67,7 +62,9 @@ class UpstreamConduit:
             )
 
     async def forward_stream(
-        self, path: str, payload: dict[str, Any],
+        self,
+        path: str,
+        payload: dict[str, Any],
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         client = self.client()
@@ -79,10 +76,11 @@ class UpstreamConduit:
         )
         return await client.send(request, stream=True)
 
-    async def passthrough(self, method: str, path: str,
-                          headers: dict[str, str],
-                          content: bytes) -> httpx.Response:
+    async def passthrough(
+        self, method: str, path: str, headers: dict[str, str], content: bytes
+    ) -> httpx.Response:
         async with self.client() as client:
             merged = {**self._auth_headers(), **self.forwardable(headers)}
             return await client.request(
-                method, upstream_path(self._base_url, path), headers=merged, content=content)
+                method, upstream_path(self._base_url, path), headers=merged, content=content
+            )

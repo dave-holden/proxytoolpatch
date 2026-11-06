@@ -74,8 +74,8 @@ def test_bare_json_after_prose_prose_first_then_call():
     obj = BARE.replace("https://pypi.org/project/pypi/", "https://x.dev/")
     prose = "I'll check PyPI for that now. "
     h = StreamHealer()
-    events = h.feed(prose)          # pure prose — released immediately
-    events += h.feed(obj)           # complete object in one delta
+    events = h.feed(prose)  # pure prose — released immediately
+    events += h.feed(obj)  # complete object in one delta
     events += h.finish()
     released = "".join(e.get("text", "") for e in events if e["type"] == "content")
     assert "check PyPI for that now" in released
@@ -88,7 +88,7 @@ def test_partial_object_then_completion_recover():
     """Object split across deltas: held while incomplete, fires when complete."""
     obj = BARE
     h = StreamHealer()
-    events = h.feed(obj[:39])       # '{"name": "webfetch", "arguments": {"ur'
+    events = h.feed(obj[:39])  # '{"name": "webfetch", "arguments": {"ur'
     # Incomplete: held, nothing released
     assert not any(e["type"] == "content" and e.get("text") for e in events)
     events += h.feed(obj[39:])
@@ -127,11 +127,11 @@ def test_sequential_calls_rapid_succession_not_suppressed():
     must NOT promote-and-lock early — call #2 must still be promoted."""
     h = StreamHealer()
     events = h.feed("checking… ")
-    events += h.feed(HERMES)        # call #1 complete, #2 not yet started
-    events += h.feed(" and ")       # inter-call gap
-    events += h.feed(HERMES_B)      # call #2 completes later
+    events += h.feed(HERMES)  # call #1 complete, #2 not yet started
+    events += h.feed(" and ")  # inter-call gap
+    events += h.feed(HERMES_B)  # call #2 completes later
     events += h.finish()
-    calls = _tool_calls(events)     # assert exactly one promotion frame
+    calls = _tool_calls(events)  # assert exactly one promotion frame
     assert [c["function"]["name"] for c in calls] == ["list_dir", "webfetch"]
     joined = "".join(e.get("text", "") for e in events if e["type"] == "content")
     assert "checking…" in joined and " and " in joined
@@ -139,7 +139,7 @@ def test_sequential_calls_rapid_succession_not_suppressed():
 
 def test_mixed_family_hermes_plus_fenced_both_promoted():
     """Parallel blocks in different families both land in the one frame."""
-    fenced = "```json\n{\"name\": \"read_file\", \"arguments\": {\"f\": \"a.py\"}}\n```"
+    fenced = '```json\n{"name": "read_file", "arguments": {"f": "a.py"}}\n```'
     text = HERMES + fenced
     events = _feed_chunks(text, 6)
     calls = _tool_calls(events)
@@ -149,11 +149,11 @@ def test_mixed_family_hermes_plus_fenced_both_promoted():
 
 def test_collecting_mode_bounded_by_cap():
     """A call followed by a rambling stream must still promote by the cap."""
-    filler = "word " * 400      # > 4 * default max_buffer (512*4 = 2048)
+    filler = "word " * 400  # > 4 * default max_buffer (512*4 = 2048)
     h = StreamHealer()
     events = h.feed(HERMES + filler)
     promotions = [e for e in events if e["type"] == "tool_calls"]
-    assert len(promotions) == 1           # cap forced one promotion
+    assert len(promotions) == 1  # cap forced one promotion
     assert promotions[0]["tool_calls"][0]["function"]["name"] == "list_dir"
     assert h.finish() == []  # _done: nothing further after the cap promotion
 

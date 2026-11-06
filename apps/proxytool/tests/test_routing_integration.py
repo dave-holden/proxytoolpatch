@@ -14,9 +14,14 @@ def _chat(sse_or_json: dict) -> bytes:
 
 def _upstream_reply(model: str) -> dict:
     return {
-        "id": "c1", "model": model,
-        "choices": [{"message": {"role": "assistant", "content": f"backend:{model}"},
-                     "finish_reason": "stop"}],
+        "id": "c1",
+        "model": model,
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": f"backend:{model}"},
+                "finish_reason": "stop",
+            }
+        ],
     }
 
 
@@ -75,8 +80,11 @@ def test_model_list_routes_to_second_backend(respx_mock_b, monkeypatch):
         client = TestClient(app)
         res = client.post(
             "/v1/chat/completions",
-            json={"model": "qwen-mlx", "stream": False,
-                  "messages": [{"role": "user", "content": "hi"}]},
+            json={
+                "model": "qwen-mlx",
+                "stream": False,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
         )
         assert res.status_code == 200
         assert res.json()["choices"][0]["message"]["content"] == "backend:mlx-be"
@@ -118,8 +126,11 @@ def test_default_backend_used_when_no_model_match(respx_mock_b, monkeypatch, moc
     client = TestClient(app)
     res = client.post(
         "/v1/chat/completions",
-        json={"model": model_alias, "stream": False,
-              "messages": [{"role": "user", "content": "hi"}]},
+        json={
+            "model": model_alias,
+            "stream": False,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
     )
     assert res.status_code == 200
     assert res.json()["choices"][0]["message"]["content"] == "backend:mlx-be"
