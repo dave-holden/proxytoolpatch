@@ -74,16 +74,14 @@ def backends_from_env() -> dict[str, Backend]:
     for var, val in os.environ.items():
         if not var.startswith("PTP_UPSTREAM_"):
             continue
-        rest = var[len("PTP_UPSTREAM_"):]
+        rest = var[len("PTP_UPSTREAM_") :]
         if rest.endswith("_MODELS"):
             continue
         if rest in RESERVED_ROUTE_SUFFIXES:
             continue
         name = rest.lower().replace("-", "_")
         models_var = f"PTP_UPSTREAM_{rest}_MODELS"
-        models = tuple(
-            m.strip() for m in os.environ.get(models_var, "").split(",") if m.strip()
-        )
+        models = tuple(m.strip() for m in os.environ.get(models_var, "").split(",") if m.strip())
         out[name] = Backend(
             name=name,
             url=val.rstrip("/"),
@@ -93,8 +91,9 @@ def backends_from_env() -> dict[str, Backend]:
     return out
 
 
-def backends_from_args(upstreams: list[str], models: dict[str, str],
-                       default_backend: str | None) -> dict[str, Backend]:
+def backends_from_args(
+    upstreams: list[str], models: dict[str, str], default_backend: str | None
+) -> dict[str, Backend]:
     """Build backends from repeatable --upstream NAME=URL and --upstream-models NAME=a,b."""
     out: dict[str, Backend] = {}
     for spec in upstreams:
@@ -105,9 +104,7 @@ def backends_from_args(upstreams: list[str], models: dict[str, str],
         out[name] = Backend(
             name=name,
             url=url.rstrip("/"),
-            models=tuple(
-                m.strip() for m in models.get(name, "").split(",") if m.strip()
-            ),
+            models=tuple(m.strip() for m in models.get(name, "").split(",") if m.strip()),
             default=(default_backend or "").lower() == name,
         )
     return out

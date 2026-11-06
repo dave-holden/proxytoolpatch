@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()      # <tool_call>
-CLOSE_TAG = bytes.fromhex("3c2f746f6f6c5f63616c6c3e").decode()   # </tool_call>
+OPEN_TAG = bytes.fromhex("3c746f6f6c5f63616c6c3e").decode()  # <tool_call>
+CLOSE_TAG = bytes.fromhex("3c2f746f6f6c5f63616c6c3e").decode()  # </tool_call>
 LEAKED = OPEN_TAG + '{"name": "list_dir", "arguments": {"path": "."}}' + CLOSE_TAG
 
 TOOL = {
@@ -44,8 +44,12 @@ def test_clean_content_untouched_with_tools(client, mock_upstream):
 
 
 def test_repair_keeps_existing_tool_calls(client, mock_upstream):
-    body = {"model": "qwen", "stream": False,
-            "messages": [{"role": "user", "content": "x"}], "tools": [TOOL]}
+    body = {
+        "model": "qwen",
+        "stream": False,
+        "messages": [{"role": "user", "content": "x"}],
+        "tools": [TOOL],
+    }
     mock_upstream.post("/v1/chat/completions").respond(
         status_code=200,
         json={
@@ -55,8 +59,11 @@ def test_repair_keeps_existing_tool_calls(client, mock_upstream):
                         "role": "assistant",
                         "content": LEAKED,
                         "tool_calls": [
-                            {"id": "call_prev", "type": "function",
-                             "function": {"name": "other", "arguments": "{}"}}
+                            {
+                                "id": "call_prev",
+                                "type": "function",
+                                "function": {"name": "other", "arguments": "{}"},
+                            }
                         ],
                     }
                 }
@@ -76,8 +83,12 @@ def test_native_call_is_not_duplicated_by_the_leak(client, mock_upstream):
     raw `<tools>` block still in `content`. Healing that content on top of the
     native entry reported the call twice, so a client ran the tool twice.
     """
-    body = {"model": "qwen", "stream": False,
-            "messages": [{"role": "user", "content": "x"}], "tools": [TOOL]}
+    body = {
+        "model": "qwen",
+        "stream": False,
+        "messages": [{"role": "user", "content": "x"}],
+        "tools": [TOOL],
+    }
     mock_upstream.post("/v1/chat/completions").respond(
         status_code=200,
         json={
@@ -87,12 +98,16 @@ def test_native_call_is_not_duplicated_by_the_leak(client, mock_upstream):
                     "message": {
                         "role": "assistant",
                         # Same call as the native entry, spaced differently.
-                        "content": (OPEN_TAG + '{"name": "list_dir", '
-                                    '"arguments": {"path": "."}}' + CLOSE_TAG),
+                        "content": (
+                            OPEN_TAG + '{"name": "list_dir", '
+                            '"arguments": {"path": "."}}' + CLOSE_TAG
+                        ),
                         "tool_calls": [
-                            {"id": "call_native", "type": "function",
-                             "function": {"name": "list_dir",
-                                          "arguments": '{"path":"."}'}}
+                            {
+                                "id": "call_native",
+                                "type": "function",
+                                "function": {"name": "list_dir", "arguments": '{"path":"."}'},
+                            }
                         ],
                     },
                 }

@@ -53,9 +53,9 @@ class StreamHealer:
     and suppressing the rest.
     """
 
-    def __init__(self, max_buffer: int = 512,
-                 tool_names: set[str] | None = None,
-                 logger: Any | None = None) -> None:
+    def __init__(
+        self, max_buffer: int = 512, tool_names: set[str] | None = None, logger: Any | None = None
+    ) -> None:
         self._max = max_buffer
         self._tool_names = tool_names
         self._buf = ""
@@ -125,8 +125,9 @@ class StreamHealer:
         stream end. An unterminated Hermes tag is only tolerated at the
         very end of the stream; mid-stream caps flush what resolved.
         """
-        ex = extract_tool_calls(self._buf, self._tool_names,
-                                allow_unterminated_hermes=allow_unterminated)
+        ex = extract_tool_calls(
+            self._buf, self._tool_names, allow_unterminated_hermes=allow_unterminated
+        )
         buf = self._buf
         self._buf = ""
         self._done = True
@@ -141,13 +142,14 @@ class StreamHealer:
         # promotion frame so a client renders it around the same turn.
         if ex.content:
             events.append({"type": "content", "text": ex.content})
-        events.append({
-            "type": "tool_calls",
-            "tool_calls": ex.tool_calls,
-            "stop": True,
-        })
-        self._log.debug("StreamHealer extracted tool calls: %d call(s)",
-                        len(ex.tool_calls))
+        events.append(
+            {
+                "type": "tool_calls",
+                "tool_calls": ex.tool_calls,
+                "stop": True,
+            }
+        )
+        self._log.debug("StreamHealer extracted tool calls: %d call(s)", len(ex.tool_calls))
         return events
 
     # -- internals ---------------------------------------------------------
@@ -168,14 +170,14 @@ class StreamHealer:
 
     def _tail_holds(self) -> bool:
         buf = self._buf
-        tail = buf[-len(_HERMES_OPEN):] if len(buf) >= len(_HERMES_OPEN) else buf
+        tail = buf[-len(_HERMES_OPEN) :] if len(buf) >= len(_HERMES_OPEN) else buf
         if _HERMES_OPEN.startswith(tail) or _HERMES_OPEN in buf[-32:]:
             return True
-        fence = buf[-len(_FENCE_MARK):] if len(buf) >= len(_FENCE_MARK) else buf
+        fence = buf[-len(_FENCE_MARK) :] if len(buf) >= len(_FENCE_MARK) else buf
         if _FENCE_MARK.startswith(fence) or buf.count(_FENCE_MARK) % 2 == 1:
             return True
         for opener in _WRAPPER_OPENS:
-            tail = buf[-len(opener):] if len(buf) >= len(opener) else buf
+            tail = buf[-len(opener) :] if len(buf) >= len(opener) else buf
             if opener.startswith(tail):
                 return True
         # Any leading '{' opens a candidate tool-call object until either the

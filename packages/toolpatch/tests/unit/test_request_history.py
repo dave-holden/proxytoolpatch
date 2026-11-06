@@ -25,8 +25,7 @@ def test_history_not_a_list_is_ignored():
 
 
 def test_duplicate_tool_call_ids_deduped():
-    tc = {"id": "c1", "type": "function",
-          "function": {"name": "f", "arguments": "{}"}}
+    tc = {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
     messages = [
         {"role": "user", "content": "hi"},
         _assistant(tool_calls=[tc, dict(tc), tc]),
@@ -43,9 +42,15 @@ def test_text_twin_matching_is_dropped():
     messages = [
         {"role": "user", "content": "hi"},
         _assistant(twin),
-        _assistant(tool_calls=[{"id": "c1", "type": "function",
-                                "function": {"name": "list_dir",
-                                             "arguments": "{\"path\": \".\"}"}}]),
+        _assistant(
+            tool_calls=[
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "list_dir", "arguments": '{"path": "."}'},
+                }
+            ]
+        ),
     ]
     clean, notes = normalize_chat_request({"messages": messages})
     assert len(clean["messages"]) == 2
@@ -58,9 +63,15 @@ def test_text_twin_mismatched_arguments_is_kept():
     messages = [
         {"role": "user", "content": "hi"},
         _assistant(twin),
-        _assistant(tool_calls=[{"id": "c1", "type": "function",
-                                "function": {"name": "list_dir",
-                                             "arguments": "{\"path\": \".\"}"}}]),
+        _assistant(
+            tool_calls=[
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "list_dir", "arguments": '{"path": "."}'},
+                }
+            ]
+        ),
     ]
     clean, _notes = normalize_chat_request({"messages": messages})
     # not an exact twin: text merged into the tool_calls turn, arguments intact
@@ -74,9 +85,15 @@ def test_text_twin_invalid_json_is_kept():
     messages = [
         {"role": "user", "content": "hi"},
         _assistant('{"name": "list_dir", "arguments": {"path": .}'),  # broken
-        _assistant(tool_calls=[{"id": "c1", "type": "function",
-                                "function": {"name": "list_dir",
-                                             "arguments": "{}"}}]),
+        _assistant(
+            tool_calls=[
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "list_dir", "arguments": "{}"},
+                }
+            ]
+        ),
     ]
     clean, _notes = normalize_chat_request({"messages": messages})
     # broken-JSON text survives (merged into the tool_calls turn as prose)
@@ -88,9 +105,12 @@ def test_merge_assistant_text_into_tool_calls_turn():
     messages = [
         {"role": "user", "content": "hi"},
         _assistant(""),
-        _assistant(tool_calls=[{"id": "c1", "type": "function",
-                                "function": {"name": "f", "arguments": "{}"}}],
-                   content=None),
+        _assistant(
+            tool_calls=[
+                {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+            ],
+            content=None,
+        ),
         {"role": "tool", "tool_call_id": "c1"},
     ]
     clean, notes = normalize_chat_request({"messages": messages})
@@ -104,8 +124,11 @@ def test_merge_assistant_with_calls_into_text_turn():
     messages = [
         {"role": "user", "content": "hi"},
         _assistant(text),
-        _assistant(tool_calls=[{"id": "c1", "type": "function",
-                                "function": {"name": "f", "arguments": "{}"}}]),
+        _assistant(
+            tool_calls=[
+                {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+            ]
+        ),
         {"role": "tool", "tool_call_id": "c1"},
     ]
     clean, _notes = normalize_chat_request({"messages": messages})
@@ -117,10 +140,8 @@ def test_merge_assistant_with_calls_into_text_turn():
 
 
 def test_merge_two_tool_call_assistant_turns():
-    c1 = {"id": "c1", "type": "function",
-          "function": {"name": "f", "arguments": "{}"}}
-    c2 = {"id": "c2", "type": "function",
-          "function": {"name": "g", "arguments": "{}"}}
+    c1 = {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+    c2 = {"id": "c2", "type": "function", "function": {"name": "g", "arguments": "{}"}}
     messages = [
         {"role": "user", "content": "hi"},
         _assistant(tool_calls=[c1]),
@@ -163,9 +184,12 @@ def test_merge_distinct_text_assistant_turns_keeps_final():
 def test_leaked_pattern_without_json_parses():
     # `{"name":` appears but the whole content is not valid JSON → except path
     messages = [
-        {"role": "user", "content": '{"name' + ': unknown'},
-        _assistant(tool_calls=[{"id": "c1", "type": "function",
-                                "function": {"name": "f", "arguments": "{}"}}]),
+        {"role": "user", "content": '{"name' + ": unknown"},
+        _assistant(
+            tool_calls=[
+                {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+            ]
+        ),
     ]
     clean, _notes = normalize_chat_request({"messages": messages})
     # the user turn with the invalid JSON stays untouched; the assistant

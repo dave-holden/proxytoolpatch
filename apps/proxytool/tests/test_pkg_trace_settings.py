@@ -15,8 +15,7 @@ import proxytool.trace as trace
 # --------------------------------------------------------------- __init__.py
 def _saved_handlers(*names):
     """(logger, saved-handlers) pairs for save/restore around a test."""
-    return [(logging.getLogger(n), logging.getLogger(n).handlers[:])
-            for n in names]
+    return [(logging.getLogger(n), logging.getLogger(n).handlers[:]) for n in names]
 
 
 def _restore_all(pairs):
@@ -30,6 +29,7 @@ def test_configure_logging_quiet_forces_error_level():
         lg.handlers = []
     try:
         from proxytool import configure_logging
+
         configure_logging(quiet=True)
         assert logging.getLogger("proxytool").level == logging.ERROR
         assert logging.getLogger("toolpatch").level == logging.ERROR
@@ -44,6 +44,7 @@ def test_configure_logging_env_falls_back(monkeypatch):
         lg.handlers = []
     try:
         from proxytool import configure_logging
+
         configure_logging(level=None, quiet=False)
         assert logging.getLogger("proxytool").level == logging.WARNING
     finally:
@@ -57,6 +58,7 @@ def test_configure_logging_invalid_env_level_raises(monkeypatch):
         lg.handlers = []
     try:
         from proxytool import configure_logging
+
         with pytest.raises(ValueError, match="unsupported log level"):
             configure_logging(level=None, quiet=False)
     finally:
@@ -70,10 +72,12 @@ def test_configure_logging_survives_toolpatch_failures(monkeypatch):
     import toolpatch.logging as tplog
 
     real_cfg = tplog.configure_logger
-    monkeypatch.setattr(tplog, "configure_logger",
-                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        tplog, "configure_logger", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
     try:
         from proxytool import configure_logging
+
         configure_logging(level="debug", quiet=False)  # must not raise
         assert logging.getLogger("proxytool").level == logging.DEBUG
     finally:
@@ -83,6 +87,7 @@ def test_configure_logging_survives_toolpatch_failures(monkeypatch):
 
 def test_resolve_level_unknown_raises():
     from proxytool import _resolve_level
+
     with pytest.raises(ValueError):
         _resolve_level("banana")
 
@@ -164,8 +169,11 @@ def test_model_map_file_wins(monkeypatch, tmp_path):
 
 def test_model_map_none():
     import os as _os
-    saved = {k: _os.environ.get(k) for k in
-             ("PTP_MODEL_MAP", "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE", "PTP_MODEL_MAP_FILE")}
+
+    saved = {
+        k: _os.environ.get(k)
+        for k in ("PTP_MODEL_MAP", "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE", "PTP_MODEL_MAP_FILE")
+    }
     for k in saved:
         _os.environ.pop(k, None)
     try:
@@ -178,6 +186,7 @@ def test_model_map_none():
 
 def test_settings_loop_flags_zero_disables():
     import os as _os
+
     saved = {k: _os.environ.get(k) for k in ("PTP_LOOP_NUDGE", "PTP_LOOP_ABORT")}
     _os.environ["PTP_LOOP_NUDGE"] = "0"
     _os.environ["PTP_LOOP_ABORT"] = "0"

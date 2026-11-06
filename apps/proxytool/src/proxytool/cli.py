@@ -39,8 +39,9 @@ from proxytool.config import apply_config, config_help_line, describe_config
 from proxytool.routing import Backend, backends_from_args, backends_from_env
 
 
-def _apply_toml_config(args: Any, *, serve: bool, routing: bool = False
-                       ) -> tuple[pathlib.Path | None, dict[str, Any], dict[str, Any]]:
+def _apply_toml_config(
+    args: Any, *, serve: bool, routing: bool = False
+) -> tuple[pathlib.Path | None, dict[str, Any], dict[str, Any]]:
     """Bridge the TOML config file into env; exit(2) with a clear message on error.
 
     Precedence everywhere: CLI flag > env var > config file > default —
@@ -67,86 +68,88 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="proxytool",
         description="Launch the proxytool API proxy (FastAPI) — a "
-                    "self-only OpenAI-compatible proxy that fronts an "
-                    "existing upstream and repairs its broken tool-call "
-                    "output (backend process management is out of scope).",
+        "self-only OpenAI-compatible proxy that fronts an "
+        "existing upstream and repairs its broken tool-call "
+        "output (backend process management is out of scope).",
     )
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser(
-        "serve", help="run proxytool in the foreground",
+        "serve",
+        help="run proxytool in the foreground",
         description="Run proxytool in the foreground: an OpenAI-compatible "
-                    "proxy that routes requests to the configured upstream "
-                    "backend(s) and repairs broken tool-call JSON on their "
-                    "responses. Runs until interrupted (Ctrl-C); server and "
-                    "request logs go to this terminal.",
+        "proxy that routes requests to the configured upstream "
+        "backend(s) and repairs broken tool-call JSON on their "
+        "responses. Runs until interrupted (Ctrl-C); server and "
+        "request logs go to this terminal.",
     )
     s.add_argument("--host", default=None, help="bind host (PTP_HOST, default 127.0.0.1)")
     s.add_argument("--port", type=int, default=None, help="bind port (PTP_PORT, default 8180)")
 
     # Routing: which backend(s) to front.
     s.add_argument(
-        "--upstream", action="append", default=[], metavar="NAME=URL",
+        "--upstream",
+        action="append",
+        default=[],
+        metavar="NAME=URL",
         help="register a backend, repeatable (PTP_UPSTREAM_<NAME>=URL)",
     )
     s.add_argument(
-        "--upstream-models", action="append", default=[], metavar="NAME=m1,m2",
-        help="model ids that route to a backend, repeatable "
-             "(PTP_UPSTREAM_<NAME>_MODELS=...)",
+        "--upstream-models",
+        action="append",
+        default=[],
+        metavar="NAME=m1,m2",
+        help="model ids that route to a backend, repeatable (PTP_UPSTREAM_<NAME>_MODELS=...)",
     )
     s.add_argument(
-        "--default-backend", default=None,
+        "--default-backend",
+        default=None,
         help="backend used when no model list matches (PTP_DEFAULT_BACKEND)",
     )
     s.add_argument(
-        "--upstream-url", default=None,
+        "--upstream-url",
+        default=None,
         help="standalone single-backend URL (PTP_UPSTREAM_URL; accepts a "
-             "bare server root or an OpenAI-rooted .../v1 base)",
+        "bare server root or an OpenAI-rooted .../v1 base)",
     )
 
     # Request-side knobs forwarded to Settings.
     s.add_argument("--model-map", default=None, help="inline JSON map (PTP_MODEL_MAP)")
-    s.add_argument("--model-map-file", default=None,
-                   help="JSON file map (PTP_MODEL_MAP_FILE)")
+    s.add_argument("--model-map-file", default=None, help="JSON file map (PTP_MODEL_MAP_FILE)")
     s.add_argument("--upstream-api-key", default=None, help="bearer token upstream")
-    s.add_argument("--upstream-timeout", type=float, default=None,
-                   help="seconds (PTP_UPSTREAM_TIMEOUT)")
+    s.add_argument(
+        "--upstream-timeout", type=float, default=None, help="seconds (PTP_UPSTREAM_TIMEOUT)"
+    )
     s.add_argument("--trace", action="store_true", help="PTP_TRACE=1")
+    s.add_argument("--loop-nudge", type=int, default=None, help="PTP_LOOP_NUDGE (0 = off)")
+    s.add_argument("--loop-abort", type=int, default=None, help="PTP_LOOP_ABORT (0 = off)")
     s.add_argument(
-        "--loop-nudge", type=int, default=None, help="PTP_LOOP_NUDGE (0 = off)"
-    )
-    s.add_argument(
-        "--loop-abort", type=int, default=None, help="PTP_LOOP_ABORT (0 = off)"
-    )
-    s.add_argument(
-        "--log-level", default=None,
+        "--log-level",
+        default=None,
         choices=("debug", "info", "warning", "error"),
-        help="app log level (PTP_LOG_LEVEL)"
+        help="app log level (PTP_LOG_LEVEL)",
     )
-    s.add_argument("--quiet", action="store_true",
-                   help="only log errors; equivalent to --log-level error")
+    s.add_argument(
+        "--quiet", action="store_true", help="only log errors; equivalent to --log-level error"
+    )
     s.add_argument("--config", default=None, help=config_help_line())
 
     # Lifecycle subcommands operate on an already-running (or not) server.
     lifecycle_descriptions = {
-        "status":
-            "Report the state of a server launched via `start`: RUNNING with "
-            "pid and URL, STALE if the pid is gone, or STOPPED if no state "
-            "file exists. Exit code reflects the state; starts nothing.",
-        "stop":
-            "Stop the server started by `start`: sends SIGTERM and waits up "
-            "to 15s for it to exit, then SIGKILL. Clears the state file "
-            "whether the pid was alive or already stale. No effect on "
-            "foreground `serve` processes — Ctrl-C those yourself.",
-        "health":
-            "Probe /health on proxytool and on each registered upstream "
-            "backend and print a JSON report. Read-only diagnostic; never "
-            "starts a server (a backend without /health is probed via "
-            "/v1/models instead).",
-        "models":
-            "Ask each registered upstream for /v1/models and list the model "
-            "ids it serves. Read-only diagnostic used to pick routing model "
-            "names and to sanity-check a backend's loaded artifacts.",
+        "status": "Report the state of a server launched via `start`: RUNNING with "
+        "pid and URL, STALE if the pid is gone, or STOPPED if no state "
+        "file exists. Exit code reflects the state; starts nothing.",
+        "stop": "Stop the server started by `start`: sends SIGTERM and waits up "
+        "to 15s for it to exit, then SIGKILL. Clears the state file "
+        "whether the pid was alive or already stale. No effect on "
+        "foreground `serve` processes — Ctrl-C those yourself.",
+        "health": "Probe /health on proxytool and on each registered upstream "
+        "backend and print a JSON report. Read-only diagnostic; never "
+        "starts a server (a backend without /health is probed via "
+        "/v1/models instead).",
+        "models": "Ask each registered upstream for /v1/models and list the model "
+        "ids it serves. Read-only diagnostic used to pick routing model "
+        "names and to sanity-check a backend's loaded artifacts.",
     }
     for name, help_text in (
         ("status", "show the running/not-running state of proxytool"),
@@ -154,8 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("health", "probe /health on proxytool and each registered backend"),
         ("models", "list the model ids each upstream reports (/v1/models)"),
     ):
-        sp = sub.add_parser(name, help=help_text,
-                            description=lifecycle_descriptions[name])
+        sp = sub.add_parser(name, help=help_text, description=lifecycle_descriptions[name])
         sp.add_argument("--host", default=None, help="proxytool host (PTP_HOST)")
         sp.add_argument("--port", type=int, default=None, help="proxytool port (PTP_PORT)")
         sp.add_argument("--config", default=None, help=config_help_line())
@@ -164,49 +166,57 @@ def build_parser() -> argparse.ArgumentParser:
         "start",
         help="daemonize: launch `serve` in the background, return immediately",
         description="Launch `serve` as a detached background daemon with the "
-                    "same flags and return once the server answers /health "
-                    "(up to 30s). The daemon's output goes to a log file "
-                    "instead of this terminal — proxytool-serve.log beside "
-                    "the state file. Manage it with `status` and `stop`.",
+        "same flags and return once the server answers /health "
+        "(up to 30s). The daemon's output goes to a log file "
+        "instead of this terminal — proxytool-serve.log beside "
+        "the state file. Manage it with `status` and `stop`.",
     )
     # `start` forwards every serve flag; build it by mirroring serve's args.
     _mirror_serve_args(start)
     start.add_argument("--host", default=None, help="bind host (PTP_HOST)")
     start.add_argument("--port", type=int, default=None, help="bind port (PTP_PORT)")
-    start.add_argument("--log-level", default=None,
-                       choices=("debug", "info", "warning", "error"),
-                       help="app log level for the daemonized server")
-    start.add_argument("--quiet", action="store_true",
-                       help="only log errors in the daemonized server")
+    start.add_argument(
+        "--log-level",
+        default=None,
+        choices=("debug", "info", "warning", "error"),
+        help="app log level for the daemonized server",
+    )
+    start.add_argument(
+        "--quiet", action="store_true", help="only log errors in the daemonized server"
+    )
     start.add_argument("--config", default=None, help=config_help_line())
 
     c = sub.add_parser(
         "config",
         help="diagnose the TOML config: discovery, validation, resolved settings",
         description="Show which config file discovery finds, validate it "
-                    "strictly (unknown keys, bad types), and print every "
-                    "setting `serve`/`start` would run with — value + "
-                    "source. Never starts a server.",
+        "strictly (unknown keys, bad types), and print every "
+        "setting `serve`/`start` would run with — value + "
+        "source. Never starts a server.",
     )
     c.add_argument(
-        "action", nargs="?", choices=("print", "check"), default="print",
+        "action",
+        nargs="?",
+        choices=("print", "check"),
+        default="print",
         help="print = discovery + validation + full settings table "
-             "(default); check = discovery + validation only",
+        "(default); check = discovery + validation only",
     )
-    c.add_argument("--json", action="store_true",
-                   help="machine-readable output instead of the table")
+    c.add_argument(
+        "--json", action="store_true", help="machine-readable output instead of the table"
+    )
     c.add_argument("--config", default=None, help=config_help_line())
 
     sub.add_parser(
-        "version", help="print the proxytool version",
+        "version",
+        help="print the proxytool version",
         description="Print the installed proxytool package version (or a "
-                    "dev-checkout marker when it is not installed), then exit.",
+        "dev-checkout marker when it is not installed), then exit.",
     )
     return p
 
 
-def _merge_env_into_process_env(args: Any,
-                                backends: dict[str, Backend]) -> None:
+def _merge_env_into_process_env(args: Any, backends: dict[str, Backend]) -> None:
     """Ensure settings_* env vars are visible to a reloaded ProxySettings."""
     if args.upstream_api_key and not os.environ.get("PTP_UPSTREAM_API_KEY"):
         os.environ["PTP_UPSTREAM_API_KEY"] = args.upstream_api_key
@@ -228,8 +238,7 @@ def _merge_env_into_process_env(args: Any,
             os.environ["PTP_DEFAULT_BACKEND"] = d
 
 
-def _pick_single_backend_url(backends: dict[str, Backend], args: Any,
-                             env_upstream: str) -> str:
+def _pick_single_backend_url(backends: dict[str, Backend], args: Any, env_upstream: str) -> str:
     """When the app-level Settings only supports one upstream, pick it here."""
     explicit = _flag_or_env(args, ["PTP_UPSTREAM_URL"], "upstream_url")
     if explicit:
@@ -247,9 +256,7 @@ def _parse_upstream_models(specs: list[str] | None) -> dict[str, str]:
         name, sep, ids = spec.partition("=")
         name = name.strip().lower()
         if not sep or not name or not ids.strip():
-            raise ValueError(
-                f"--upstream-models expects NAME=m1,m2, got: {spec!r}"
-            )
+            raise ValueError(f"--upstream-models expects NAME=m1,m2, got: {spec!r}")
         out[name] = ids
     return out
 
@@ -258,22 +265,29 @@ def cmd_serve(args: Any) -> int:
     # 0. TOML config bridge (precedence: flag > env > file > default).
     cfg_path, _cfg, cfg_info = _apply_toml_config(args, serve=True, routing=True)
     if cfg_path:
-        print(f"[proxytool] config: using {cfg_path} "
-              f"({len(cfg_info['applied'])} setting(s) bridged)", file=sys.stderr,
-              flush=True)
+        print(
+            f"[proxytool] config: using {cfg_path} ({len(cfg_info['applied'])} setting(s) bridged)",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # 1. Resolve backends: explicit flags, then env, then single --upstream-url.
     backends = backends_from_args(
-        args.upstream, _parse_upstream_models(args.upstream_models),
+        args.upstream,
+        _parse_upstream_models(args.upstream_models),
         args.default_backend,
     )
     if not backends:
         backends = backends_from_env()
     if args.upstream_url:
-        backends.setdefault("default", Backend(
-            name="default", url=args.upstream_url.rstrip("/"),
-            default=len(backends) == 0,
-        ))
+        backends.setdefault(
+            "default",
+            Backend(
+                name="default",
+                url=args.upstream_url.rstrip("/"),
+                default=len(backends) == 0,
+            ),
+        )
 
     # 3. Settings env bridge (flags → env → Settings defaults).
     _merge_env_into_process_env(args, backends)
@@ -281,13 +295,12 @@ def cmd_serve(args: Any) -> int:
     # intentionally separate from Uvicorn's log_level below, which only
     # controls the server/framework log output.
     from proxytool import configure_logging as _cfg
+
     _cfg(level=args.log_level, quiet=args.quiet)
     # proxytool.main builds its own Settings from env at import time (inside
     # uvicorn.run), so resolved values must be exported as env, not mutated
     # on a local instance uvicorn never sees.
-    resolved_url = _pick_single_backend_url(
-        backends, args, os.environ.get("PTP_UPSTREAM_URL", "")
-    )
+    resolved_url = _pick_single_backend_url(backends, args, os.environ.get("PTP_UPSTREAM_URL", ""))
     os.environ["PTP_UPSTREAM_URL"] = resolved_url
     # Multi-backend table: only export when the user declared >1 backend (or
     # declared one by name) — a single default backend would otherwise make
@@ -303,8 +316,12 @@ def cmd_serve(args: Any) -> int:
             os.environ["PTP_DEFAULT_BACKEND"] = d.name
     if args.trace:
         os.environ["PTP_TRACE"] = "1"
-    print(f"[proxytool] proxy on {args.host or '127.0.0.1'}:{args.port or 8180}"
-          f" → upstream {resolved_url}", file=sys.stderr, flush=True)
+    print(
+        f"[proxytool] proxy on {args.host or '127.0.0.1'}:{args.port or 8180}"
+        f" → upstream {resolved_url}",
+        file=sys.stderr,
+        flush=True,
+    )
 
     # 4. Run uvicorn in-process; SIGINT/SIGTERM propagate normally.
     uvicorn.run(
@@ -375,10 +392,20 @@ def _mirror_serve_args(parser: argparse.ArgumentParser) -> None:
     """Give `start` the same flags as `serve` (it wraps `serve`)."""
     for dest, flag, help_text in _SERVE_FLAGS:
         parser.add_argument(flag, dest=dest, default=None, help=help_text)
-    parser.add_argument("--upstream", action="append", default=[],
-                        metavar="NAME=URL", help="register a backend, repeatable")
-    parser.add_argument("--upstream-models", action="append", default=[],
-                        metavar="NAME=m1,m2", help="model ids routed to a backend")
+    parser.add_argument(
+        "--upstream",
+        action="append",
+        default=[],
+        metavar="NAME=URL",
+        help="register a backend, repeatable",
+    )
+    parser.add_argument(
+        "--upstream-models",
+        action="append",
+        default=[],
+        metavar="NAME=m1,m2",
+        help="model ids routed to a backend",
+    )
     parser.add_argument("--trace", action="store_true", help="payload trace on")
     parser.add_argument("--loop-nudge", type=int, default=None, help="loop nudge threshold")
     parser.add_argument("--loop-abort", type=int, default=None, help="loop abort threshold")
@@ -425,7 +452,7 @@ def cmd_status(_args: Any) -> int:
     """Check whether the server (started via ``start``) is alive and healthy."""
     _apply_toml_config(_args, serve=False)  # config host/port for the probe
     state = _read_state()
-    host, port = (_host_port(_args) if hasattr(_args, "host") else ("127.0.0.1", 8180))
+    host, port = _host_port(_args) if hasattr(_args, "host") else ("127.0.0.1", 8180)
     if state and _pid_alive(int(state.get("pid", 0))):
         print(f"proxytool status: RUNNING (pid {state['pid']}, http://{host}:{port})")
         return 0
@@ -477,14 +504,19 @@ def cmd_start(args: Any) -> int:
         return 1
     # Rebuild the exact serve invocation from the parsed flags.
     argv = [sys.executable, "-m", "proxytool", "serve", "--host", host, "--port", str(port)]
-    for name in ("upstream_url", "model_map", "model_map_file",
-                 "upstream_api_key", "upstream_timeout"):
+    for name in (
+        "upstream_url",
+        "model_map",
+        "model_map_file",
+        "upstream_api_key",
+        "upstream_timeout",
+    ):
         v = getattr(args, name, None)
         if v:
             argv += [f"--{name.replace('_', '-')}", str(v)]
-    for spec in (args.upstream or []):
+    for spec in args.upstream or []:
         argv += ["--upstream", spec]
-    for spec in (args.upstream_models or []):
+    for spec in args.upstream_models or []:
         argv += ["--upstream-models", spec]
     if args.default_backend:
         argv += ["--default-backend", args.default_backend]
@@ -504,11 +536,15 @@ def cmd_start(args: Any) -> int:
     log_path = _state_path().with_suffix(".log")
     with open(log_path, "ab") as log:
         child = subprocess.Popen(
-            argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+            argv,
+            stdout=log,
+            stderr=log,
+            stdin=subprocess.DEVNULL,
             start_new_session=True,  # detach from our terminal's process group
         )
     # Wait for /health so `start` returns only when the server truly answers.
     import urllib.request
+
     deadline = time.monotonic() + 30.0
     while time.monotonic() < deadline:
         try:
@@ -517,17 +553,21 @@ def cmd_start(args: Any) -> int:
                     break
         except Exception:
             if child.poll() is not None:
-                print(f"proxytool start: process died during startup — see {log_path}",
-                      file=sys.stderr)
+                print(
+                    f"proxytool start: process died during startup — see {log_path}",
+                    file=sys.stderr,
+                )
                 return 1
             time.sleep(0.3)
     else:
         child.terminate()
-        print(f"proxytool start: /health never came up within 30s — see {log_path}",
-              file=sys.stderr)
+        print(
+            f"proxytool start: /health never came up within 30s — see {log_path}", file=sys.stderr
+        )
         return 1
-    _write_state({"pid": child.pid, "host": host, "port": port,
-                  "log": str(log_path), "argv": argv[2:]})
+    _write_state(
+        {"pid": child.pid, "host": host, "port": port, "log": str(log_path), "argv": argv[2:]}
+    )
     print(f"proxytool start: running (pid {child.pid}, http://{host}:{port}, log {log_path})")
     return 0
 
@@ -560,8 +600,7 @@ def cmd_health(args: Any) -> int:
                 entry["ok"] = r.status < 400
         except Exception as e:
             try:
-                with urllib.request.urlopen(
-                        upstream_url(b.url, "v1/models"), timeout=3) as r:
+                with urllib.request.urlopen(upstream_url(b.url, "v1/models"), timeout=3) as r:
                     entry["ok"] = r.status < 400  # mlx_lm.server has no /health
                     entry["via"] = "/v1/models fallback"
             except Exception:

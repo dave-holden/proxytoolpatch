@@ -3,7 +3,7 @@
 # pre-push-gate.sh — quality gate run before a commit or push.
 # Wired into git via `core.hooksPath .githooks` (see .githooks/install.sh).
 #
-# Runs: ruff lint → quick default-python pytest. Tools that can't run
+# Runs: ruff lint → ruff format check → quick default-python pytest. Tools that can't run
 # (missing interpreter / no network for uv) degrade to a warning, never
 # silently pass — the script reports what it could NOT run.
 set -uo pipefail
@@ -31,6 +31,7 @@ echo "════════════════════════�
 
 if command -v uv >/dev/null 2>&1; then
   step "ruff lint"              uv run ruff check .
+  step "ruff format"            uv run ruff format --check .
   step "pytest (default python)" uv run pytest -q
   if [[ "$STAGE" == "pre-push" && "${FULL_MATRIX:-0}" == "1" ]]; then
     if [[ -x dev/scripts/test-matrix.sh ]]; then # local-only (untracked) full matrix

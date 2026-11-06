@@ -85,8 +85,14 @@ def test_emit_returns_without_handlers():
     try:
         logger.handlers.clear()
         record = logging.LogRecord(
-            name=name, level=logging.INFO, pathname="p", lineno=1,
-            msg="not emitted", args=(), exc_info=None)
+            name=name,
+            level=logging.INFO,
+            pathname="p",
+            lineno=1,
+            msg="not emitted",
+            args=(),
+            exc_info=None,
+        )
         assert _emit(record) is None
     finally:
         logger.handlers = saved
@@ -115,8 +121,14 @@ def test_emit_routes_record_to_real_handler():
         handler.setLevel(logging.DEBUG)
         logger.addHandler(handler)
         record = logging.LogRecord(
-            name="toolpatch.emit", level=logging.WARNING, pathname="p",
-            lineno=1, msg="emitted via _emit", args=(), exc_info=None)
+            name="toolpatch.emit",
+            level=logging.WARNING,
+            pathname="p",
+            lineno=1,
+            msg="emitted via _emit",
+            args=(),
+            exc_info=None,
+        )
         _emit(record)
         assert "emitted via _emit" in stream.getvalue()
     finally:

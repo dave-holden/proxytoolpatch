@@ -60,3 +60,37 @@ jobs:
         with:
           python-version: "3.11" # lowest floor — the nox pyright session pins 3.11 too
       - run: uv run nox -s pyright
+
+  # A commit message must not carry AI-tool attribution (.agents/instructions.md),
+  # and rewriting history does not undo it: GitHub keeps every pull-request head
+  # in `refs/pull/*` forever, so a `Generated with …` footer removed later stays
+  # fetchable. The local `commit-msg` hook (.githooks/commit-msg) is the
+  # per-commit control; this is the one that cannot be skipped with
+  # `git commit --no-verify`.
+  #
+  # `--range a..b` is git range syntax, so a PR checks every commit it adds;
+  # `--range HEAD` means that single commit (not the history behind it), which is
+  # what a push to main needs — main is clean as of the 2026-11-06 rewrite.
+  # fetch-depth: 0 because a shallow checkout cannot resolve the merge base.
+  attribution:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The guard is itself code that can regress (a rule that stops matching,
+      # a range that walks the wrong commits), so it is tested before it is
+      # trusted. No install step: node's built-in runner, no dependencies.
+      - name: Guard self-tests
+        run: node --test "scripts/*.test.mjs"
+      - name: Commit attribution gate
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            range="origin/$BASE_REF..HEAD"
+          else
+            range="HEAD"
+          fi
+          echo "checking $range"
+          node scripts/check-commit-attribution.mjs --range "$range"

@@ -59,9 +59,7 @@ def test_unit_zero_thresholds_disable():
 
 def test_unit_identical_payload_yields_identical_key():
     assert LoopGuard.request_key(_body()) == LoopGuard.request_key(_body())
-    assert LoopGuard.request_key(_body()) != LoopGuard.request_key(
-        _body(content="changed")
-    )
+    assert LoopGuard.request_key(_body()) != LoopGuard.request_key(_body(content="changed"))
 
 
 # -- proxy: forwarded requests -----------------------------------------------

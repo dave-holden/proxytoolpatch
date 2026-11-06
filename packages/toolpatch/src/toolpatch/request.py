@@ -19,9 +19,7 @@ from typing import Any, Literal
 Backend = Literal["gguf", "mlx"]
 
 
-def normalize_chat_request(
-    payload: dict, backend: Backend = "gguf"
-) -> tuple[dict, list[str]]:
+def normalize_chat_request(payload: dict, backend: Backend = "gguf") -> tuple[dict, list[str]]:
     """Return (sanitized_payload, operator_notes). Input is deep-copied, never mutated."""
     out = copy.deepcopy(payload)
     notes: list[str] = []
@@ -111,18 +109,12 @@ def _sanitize_history(messages: list[dict[str, Any]], notes: list[str]) -> None:
                 fresh.append(tc)
             if len(fresh) != len(tcs):
                 m["tool_calls"] = fresh
-                notes.append(
-                    f"duplicate tool_call ids deduped ({len(tcs) - len(fresh)} removed)"
-                )
+                notes.append(f"duplicate tool_call ids deduped ({len(tcs) - len(fresh)} removed)")
 
         # 1. text-twins of a repaired tool_calls turn: `leaked` text immediately
         #    before an assistant tool_calls turn whose call matches.
         content = m.get("content")
-        if (
-            isinstance(content, str)
-            and leaked.search(content)
-            and i + 1 < len(messages)
-        ):
+        if isinstance(content, str) and leaked.search(content) and i + 1 < len(messages):
             nxt = messages[i + 1]
             nxt_stem = _stem(nxt)
             if nxt_stem and not m.get("tool_calls"):
@@ -181,9 +173,7 @@ def _sanitize_history(messages: list[dict[str, Any]], notes: list[str]) -> None:
                 notes.append("duplicate adjacent assistant turns deduped")
                 continue
             # distinct assistant texts: keep the LAST one (the final generation)
-            nxt["content"] = (
-                (m.get("content") or "") + "\n" + (nxt.get("content") or "")
-            ).strip()
+            nxt["content"] = ((m.get("content") or "") + "\n" + (nxt.get("content") or "")).strip()
             messages.pop(i)
             merged += 1
             notes.append("assistant turns merged (text + text)")

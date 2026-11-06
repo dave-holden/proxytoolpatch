@@ -19,7 +19,7 @@ from toolpatch.stream import StreamHealer
 # ── BEFORE: the model leaked the call into its text ─────────────────────────
 MODEL_REPLY = (
     "I'll list the directory now.\n"
-    "<tool_call>{\"name\":\"list_dir\",\"arguments\":{\"path\":\".\"}}</tool_call>"
+    '<tool_call>{"name":"list_dir","arguments":{"path":"."}}</tool_call>'
 )
 #                 ^ the client shows this as prose — no tool runs
 
@@ -37,8 +37,14 @@ print("    tool_calls →", json.dumps(fixed.tool_calls[0]["function"]))
 # ── AFTER 2: streaming repair — same call arriving as SSE deltas ────────────
 DELTAS = [
     "I'll list the directory now.\n",
-    "<tool_call>", "{\"name\":", "\"lis", "t_dir\"",
-    ", \"ar", "guments", "\": {\"path\": \".\"}}", "\n</tool_call>",
+    "<tool_call>",
+    '{"name":',
+    '"lis',
+    't_dir"',
+    ', "ar',
+    "guments",
+    '": {"path": "."}}',
+    "\n</tool_call>",
 ]
 
 healer = StreamHealer(tool_names={"list_dir"})

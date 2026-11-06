@@ -75,8 +75,7 @@ def find_config(explicit: str | None = None) -> Path | None:
         return p
     xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     cwd = Path.cwd()
-    for cand in (cwd / CWD_NAMES[0], cwd / CWD_NAMES[1],
-                 Path(xdg) / "proxytool" / "config.toml"):
+    for cand in (cwd / CWD_NAMES[0], cwd / CWD_NAMES[1], Path(xdg) / "proxytool" / "config.toml"):
         if cand.is_file():
             return cand
     return None
@@ -184,12 +183,19 @@ def _pydantic_error_lines(exc: ValidationError) -> list[str]:
         if err.get("type") == "extra_forbidden" and loc:
             key = loc[-1]
             if len(loc) == 1:
-                lines.append("unknown key '" + key + "' (top level)"
-                             + _did_you_mean(key, _TOP_KEYS))
+                lines.append(
+                    "unknown key '" + key + "' (top level)" + _did_you_mean(key, _TOP_KEYS)
+                )
             else:
                 section = loc[0]
-                lines.append("unknown key '" + key + "' in [" + section + "]"
-                             + _did_you_mean(key, _SECTION_FIELDS.get(section)))
+                lines.append(
+                    "unknown key '"
+                    + key
+                    + "' in ["
+                    + section
+                    + "]"
+                    + _did_you_mean(key, _SECTION_FIELDS.get(section))
+                )
             continue
         msg = str(err.get("msg", "invalid value"))
         prefix = "[" + ".".join(loc or ()) + "] " if loc else ""
@@ -215,13 +221,15 @@ def validate_config(data: dict[str, Any], label: str = "config") -> None:
                 if str(name).upper() in RESERVED_ROUTE_SUFFIXES:
                     errors.append(
                         f"routing.{name}: reserved route name "
-                        f"({'/'.join(s.lower() for s in RESERVED_ROUTE_SUFFIXES)})")
-            defaults = [str(n) for n, t in routing.items()
-                        if isinstance(t, dict) and t.get("default")]
+                        f"({'/'.join(s.lower() for s in RESERVED_ROUTE_SUFFIXES)})"
+                    )
+            defaults = [
+                str(n) for n, t in routing.items() if isinstance(t, dict) and t.get("default")
+            ]
             if len(defaults) > 1:
                 errors.append(
-                    "default = true on more than one routing entry: "
-                    + ", ".join(defaults))
+                    "default = true on more than one routing entry: " + ", ".join(defaults)
+                )
 
     try:
         _Config.model_validate(data)
@@ -262,7 +270,7 @@ def _env_backends_present() -> bool:
     for var in os.environ:
         if not var.startswith("PTP_UPSTREAM_"):
             continue
-        rest = var[len("PTP_UPSTREAM_"):]
+        rest = var[len("PTP_UPSTREAM_") :]
         if rest in RESERVED_ROUTE_SUFFIXES:
             continue
         return True
@@ -296,12 +304,15 @@ def _bridge_routing(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
         else:
             # top-level default_backend unset → accept `default = true` on
             # exactly one [routing.*] entry (the llama-swap-style spelling).
-            defaults = [str(n) for n, t in (cfg.get("routing") or {}).items()
-                        if isinstance(t, dict) and t.get("default")]
+            defaults = [
+                str(n)
+                for n, t in (cfg.get("routing") or {}).items()
+                if isinstance(t, dict) and t.get("default")
+            ]
             if len(defaults) > 1:
                 raise ValueError(
-                    "default = true on more than one routing entry: "
-                    + ", ".join(defaults))
+                    "default = true on more than one routing entry: " + ", ".join(defaults)
+                )
             if defaults:
                 os.environ["PTP_DEFAULT_BACKEND"] = defaults[0]
                 applied.append("PTP_DEFAULT_BACKEND")
@@ -309,11 +320,17 @@ def _bridge_routing(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
 
 def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None:
     """Top-level + [upstream] + [model_map] + [loopguard] + [trace] settings."""
-    if _flag_unset(_flag("host", args)) and "host" in cfg and _set_if_unset(
-            "PTP_HOST", str(cfg["host"])):
+    if (
+        _flag_unset(_flag("host", args))
+        and "host" in cfg
+        and _set_if_unset("PTP_HOST", str(cfg["host"]))
+    ):
         applied.append("PTP_HOST")
-    if _flag("port", args) is None and "port" in cfg and _set_if_unset(
-            "PTP_PORT", str(int(cfg["port"]))):
+    if (
+        _flag("port", args) is None
+        and "port" in cfg
+        and _set_if_unset("PTP_PORT", str(int(cfg["port"])))
+    ):
         applied.append("PTP_PORT")
     if _flag("log_level", args) is None and not _flag("quiet", args):
         raw = str(cfg.get("log_level", "") or "")
@@ -321,20 +338,21 @@ def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None
             applied.append("PTP_LOG_LEVEL")
 
     up = cfg.get("upstream") or {}
-    if _flag_unset(_flag("upstream_url", args)) and up.get("url") and _set_if_unset(
-            "PTP_UPSTREAM_URL", str(up["url"]).rstrip("/")):
+    if (
+        _flag_unset(_flag("upstream_url", args))
+        and up.get("url")
+        and _set_if_unset("PTP_UPSTREAM_URL", str(up["url"]).rstrip("/"))
+    ):
         applied.append("PTP_UPSTREAM_URL")
     for attr, key, envk in (
         ("upstream_api_key", "api_key", "PTP_UPSTREAM_API_KEY"),
         ("upstream_timeout", "timeout", "PTP_UPSTREAM_TIMEOUT"),
     ):
-        if _flag_unset(_flag(attr, args)) and up.get(key) and _set_if_unset(
-                envk, str(up[key])):
+        if _flag_unset(_flag(attr, args)) and up.get(key) and _set_if_unset(envk, str(up[key])):
             applied.append(envk)
 
     mm = None
-    if _flag_unset(_flag("model_map", args)) and _flag_unset(
-            _flag("model_map_file", args)):
+    if _flag_unset(_flag("model_map", args)) and _flag_unset(_flag("model_map_file", args)):
         table = cfg.get("model_map")
         if isinstance(table, dict) and table:
             mm = json.dumps({str(k): str(v) for k, v in table.items()})
@@ -348,22 +366,24 @@ def _bridge_settings(cfg: dict[str, Any], args: Any, applied: list[str]) -> None
         ("loop_nudge", "nudge", "PTP_LOOP_NUDGE"),
         ("loop_abort", "abort", "PTP_LOOP_ABORT"),
     ):
-        if _flag(attr, args) is None and lg.get(key) is not None and _set_if_unset(
-                envk, str(int(lg[key]))):
+        if (
+            _flag(attr, args) is None
+            and lg.get(key) is not None
+            and _set_if_unset(envk, str(int(lg[key])))
+        ):
             applied.append(envk)
 
     tr = cfg.get("trace") or {}
-    if not _flag("trace", args) and tr.get("enabled") and _set_if_unset(
-            "PTP_TRACE", "1"):
+    if not _flag("trace", args) and tr.get("enabled") and _set_if_unset("PTP_TRACE", "1"):
         applied.append("PTP_TRACE")
     if tr.get("file") and not _env_set("PTP_TRACE_FILE"):
         os.environ["PTP_TRACE_FILE"] = str(tr["file"])
         applied.append("PTP_TRACE_FILE")
 
 
-def apply_config(args: Any, *, serve: bool,
-                 routing: bool = False) -> tuple[Path | None, dict[str, Any],
-                                                 dict[str, Any]]:
+def apply_config(
+    args: Any, *, serve: bool, routing: bool = False
+) -> tuple[Path | None, dict[str, Any], dict[str, Any]]:
     """Bridge the resolved config into env.
 
     Returns ``(path, cfg, info)`` where ``info`` carries ``applied``
@@ -384,8 +404,10 @@ def apply_config(args: Any, *, serve: bool,
 def config_help_line() -> str:
     """Short discovery summary for --help text."""
     home = Path.home() / ".config" / "proxytool" / "config.toml"
-    return (f"TOML config file (PTP_CONFIG; default search: ./proxytool.toml, "
-            f"./.proxytool.toml, {home})")
+    return (
+        f"TOML config file (PTP_CONFIG; default search: ./proxytool.toml, "
+        f"./.proxytool.toml, {home})"
+    )
 
 
 # ── diagnostics (`proxytool config print|check`) ────────────────────────────
@@ -441,8 +463,9 @@ def _relevant_env_keys(keys: Any) -> list[str]:
     return sorted(out)
 
 
-def describe_config(args: Any | None, *, routing: bool = True,
-                    serve: bool = True) -> dict[str, Any]:
+def describe_config(
+    args: Any | None, *, routing: bool = True, serve: bool = True
+) -> dict[str, Any]:
     """Dry-run the config bridge: resolve, validate, attribute — no env edits.
 
     Returns a JSON-friendly dict with the discovered file, the candidates
@@ -457,8 +480,12 @@ def describe_config(args: Any | None, *, routing: bool = True,
     candidates = [str(p) for p in _search_candidates(explicit)]
     snapshot = dict(os.environ)
     out: dict[str, Any] = {
-        "file": None, "searched": candidates, "valid": True, "errors": [],
-        "applied": [], "settings": [],
+        "file": None,
+        "searched": candidates,
+        "valid": True,
+        "errors": [],
+        "applied": [],
+        "settings": [],
         "precedence": "CLI flag > env var > config file > built-in default",
     }
     in_file = next((c for c in candidates if Path(c).is_file()), None)

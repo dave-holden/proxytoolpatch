@@ -18,10 +18,14 @@ log = get_logger("toolpatch.fixer")
 _TRAILING_RE = re.compile(r",\s*([}\]])")
 _FENCE_START = re.compile(r"^\s*```(?:json)?\s*")
 _FENCE_END = re.compile(r"\s*```\s*$")
-_SMART = str.maketrans({
-    "\u201c": '"', "\u201d": '"',
-    "\u2018": "'", "\u2019": "'",
-})
+_SMART = str.maketrans(
+    {
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2018": "'",
+        "\u2019": "'",
+    }
+)
 
 
 def _unescape_stray_newlines_in_strings(s: str) -> str:
