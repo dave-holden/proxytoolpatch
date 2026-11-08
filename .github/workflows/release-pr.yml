@@ -33,6 +33,15 @@ concurrency:
 
 jobs:
   release-pr:
+    # Merging the release PR lands the bump commit on main *before* its tags are
+    # pushed, so the push-triggered plan still sees that release's own commits as
+    # unreleased and opens a phantom next-version PR (that is how #47 appeared,
+    # 90s ahead of the tags). Squash merges are covered by SKIP_SUBJECTS, which
+    # drops `chore(release): ...`; this covers the merge-commit spelling. The
+    # weekly cron still catches a release whose tags were genuinely forgotten.
+    if: >-
+      github.event_name != 'push' ||
+      !contains(github.event.head_commit.message, '/release/next')
     runs-on: ubuntu-24.04
     steps:
       # Full history + tags: the planner diffs each package against its last
