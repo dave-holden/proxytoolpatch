@@ -3,8 +3,8 @@
 #   proxytool serve --config examples/proxytool/proxytool-routing.toml
 #
 # Ports (see dev/RIG.md — local-only, not in the repo):
-#   8180 proxytool · 8181 llama serve qwen-gguf · 8182 llama serve phi-4-mini
-#   8281 mlx_lm.server qwen-mlx · 8381 oMLX phi-4-mini-mlx
+#   8180 proxytool · 8181 llama serve qwen-gguf · 8182 llama serve qwen2.5-0.5b-instruct-gguf
+#   8281 mlx_lm.server qwen-mlx · 8381 oMLX qwen2.5-0.5b-4bit
 #
 # Precedence per key: CLI flag > env var > this file > built-in default.
 # [upstream] and [routing.*] are mutually exclusive — use one or the other.
@@ -21,17 +21,17 @@ default_backend = "qwen-gguf"
 url = "http://127.0.0.1:8181"
 models = ["qwen-gguf"]
 
-[routing.phi-4-mini]           # llama.cpp, GGUF
+[routing."qwen2.5-0.5b-instruct-gguf"]   # llama.cpp, GGUF
 url = "http://127.0.0.1:8182"
-models = ["phi-4-mini"]
+models = ["qwen2.5-0.5b-instruct-gguf"]
 
 [routing.qwen-mlx]             # mlx_lm.server
 url = "http://127.0.0.1:8281"
 models = ["qwen-mlx"]
 
-[routing.phi-4-mini-mlx]       # oMLX (model dir name == OpenAI model id)
+[routing."qwen2.5-0.5b-4bit"]    # oMLX (model dir name == OpenAI model id)
 url = "http://127.0.0.1:8381"
-models = ["phi-4-mini-mlx"]
+models = ["qwen2.5-0.5b-4bit"]
 
 # ── client alias → the id the upstream actually serves ──────────────────────
 [model_map]
@@ -39,9 +39,9 @@ models = ["phi-4-mini-mlx"]
 # 404 "Repository Not Found", so the alias must be pinned here.
 "qwen-mlx" = "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit"
 # oMLX serves the directory name, which is the id we send, so no entry is
-# needed for phi-4-mini-mlx. If oMLX picks the model up from the Hugging Face
-# cache instead, its id is the mangled cache dir name — map it here:
-# "phi-4-mini-mlx" = "mlx-community--Phi-4-mini-instruct-4bit"
+# needed for qwen2.5-0.5b-4bit. If oMLX picks the model up from the Hugging
+# Face cache instead, its id is the mangled cache dir name — map it here:
+# "qwen2.5-0.5b-4bit" = "mlx-community--Qwen2.5-0.5B-Instruct-4bit"
 
 # ── LoopGuard: identical requests → nudge, then abort ───────────────────────
 [loopguard]

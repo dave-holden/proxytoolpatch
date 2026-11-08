@@ -78,9 +78,7 @@ def _resolve_level(raw: str) -> int:
     }
     normalized = raw.strip().lower()
     if normalized not in mapping:
-        raise ValueError(
-            f"unsupported log level {raw!r}; expected one of {list(mapping)}"
-        )
+        raise ValueError(f"unsupported log level {raw!r}; expected one of {list(mapping)}")
     return mapping[normalized]
 
 
@@ -101,7 +99,9 @@ def _ensure_handler(logger: _logging.Logger, level: int, *, stream) -> None:
         return
     handler = _logging.StreamHandler(stream)
     handler.setLevel(level)
-    handler.setFormatter(_logging.Formatter(
-        "%(levelname)s [%(name)s] %(message)s",
-    ))
+    handler.setFormatter(
+        _logging.Formatter(
+            "%(levelname)s [%(name)s] %(message)s",
+        )
+    )
     logger.addHandler(handler)

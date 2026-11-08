@@ -78,9 +78,11 @@ def _configure_handler(logger: Any, level: int) -> None:
         return
     handler = _logging.StreamHandler(_sys.stderr)
     handler.setLevel(level)
-    handler.setFormatter(_logging.Formatter(
-        "%(levelname)s [%(name)s] %(message)s",
-    ))
+    handler.setFormatter(
+        _logging.Formatter(
+            "%(levelname)s [%(name)s] %(message)s",
+        )
+    )
     logger.addHandler(handler)
 
 

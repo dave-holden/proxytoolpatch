@@ -29,19 +29,19 @@
           "maxTokens": 8192
         },
         {
-          "id": "phi-4-mini",
-          "name": "Phi-4-mini Q5_K_M via proxytool",
+          "id": "qwen2.5-0.5b-instruct-gguf",
+          "name": "Qwen2.5-0.5B-Instruct GGUF via proxytool",
           "input": ["text"],
-          "contextWindow": 16384,
-          "maxTokens": 4096
+          "contextWindow": 8192,
+          "maxTokens": 2048
         },
         {
           // oMLX serves the model directory name as the id (see dev/RIG.md).
-          "id": "phi-4-mini-mlx",
-          "name": "Phi-4-mini 4bit via oMLX",
+          "id": "qwen2.5-0.5b-4bit",
+          "name": "Qwen2.5-0.5B-Instruct-4bit via oMLX",
           "input": ["text"],
-          "contextWindow": 16384,
-          "maxTokens": 4096
+          "contextWindow": 4096,
+          "maxTokens": 2048
         }
       ]
     }

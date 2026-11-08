@@ -44,8 +44,11 @@ def _chat(mock_upstream):
 def _post(client, model: str):
     return client.post(
         "/v1/chat/completions",
-        json={"model": model, "stream": False,
-              "messages": [{"role": "user", "content": f"hello from {model}"}]},
+        json={
+            "model": model,
+            "stream": False,
+            "messages": [{"role": "user", "content": f"hello from {model}"}],
+        },
     )
 
 
@@ -75,9 +78,7 @@ def test_exact_upstream_id_passes_through(client, mock_upstream):
 
 def test_lmw_model_map_takes_precedence(client, mock_upstream, monkeypatch):
     """An explicit PTP_MODEL_MAP entry wins — no upstream discovery is attempted."""
-    monkeypatch.setattr(
-        main_mod.settings, "model_map", {"qwen-mlx": "mapped-explicit/id"}
-    )
+    monkeypatch.setattr(main_mod.settings, "model_map", {"qwen-mlx": "mapped-explicit/id"})
     route = _chat(mock_upstream)  # only the chat route is registered
 
     res = _post(client, "qwen-mlx")
@@ -155,6 +156,7 @@ def test_tied_overlap_without_path_returns_alias(client, mock_upstream):
 
 
 # -- routed setups -----------------------------------------------------------
+
 
 def test_routed_mode_keeps_alias_unmodified(client, mock_upstream, monkeypatch):
     """With a routing table active, an unmapped id is never rewritten.

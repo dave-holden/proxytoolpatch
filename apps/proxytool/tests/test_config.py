@@ -42,12 +42,22 @@ def _write_toml(tmp_path, text: str):
 
 def _args(**kw: Any):
     base: dict[str, Any] = {
-        "config": None, "host": None, "port": None, "quiet": False,
-        "log_level": None, "upstream_url": None,
-        "upstream_api_key": None, "upstream_timeout": None,
-        "model_map": None, "model_map_file": None, "trace": False,
-        "loop_nudge": None, "loop_abort": None, "default_backend": None,
-        "upstream": [], "upstream_models": [],
+        "config": None,
+        "host": None,
+        "port": None,
+        "quiet": False,
+        "log_level": None,
+        "upstream_url": None,
+        "upstream_api_key": None,
+        "upstream_timeout": None,
+        "model_map": None,
+        "model_map_file": None,
+        "trace": False,
+        "loop_nudge": None,
+        "loop_abort": None,
+        "default_backend": None,
+        "upstream": [],
+        "upstream_models": [],
     }
     base.update(kw)
     return type("A", (), base)()
@@ -102,20 +112,23 @@ class TestLoadConfig:
 class TestBridgeSettings:
     def test_bridge_fills_unset_values(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        _write_toml(tmp_path, (
-            'host = "0.0.0.0"\n'
-            "port = 9999\n"
-            'log_level = "debug"\n'
-            "[upstream]\n"
-            'url = "http://127.0.0.1:8080/"\n'
-            "timeout = 600\n"
-            'api_key = "sk-t"\n'
-            "[model_map]\n"
-            '"a" = "b"\n'
-            "[loopguard]\n"
-            "nudge = 2\n"
-            "abort = 4\n"
-        ))
+        _write_toml(
+            tmp_path,
+            (
+                'host = "0.0.0.0"\n'
+                "port = 9999\n"
+                'log_level = "debug"\n'
+                "[upstream]\n"
+                'url = "http://127.0.0.1:8080/"\n'
+                "timeout = 600\n"
+                'api_key = "sk-t"\n'
+                "[model_map]\n"
+                '"a" = "b"\n'
+                "[loopguard]\n"
+                "nudge = 2\n"
+                "abort = 4\n"
+            ),
+        )
         path, _cfg, info = _apply_toml_config(_args(), serve=True)
         assert path == tmp_path / "proxytool.toml"
         assert os.environ["PTP_HOST"] == "0.0.0.0"
@@ -132,8 +145,9 @@ class TestBridgeSettings:
     def test_flag_wins_over_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         _write_toml(tmp_path, 'port = 9999\n[upstream]\nurl = "http://cfg:1"')
-        _path, _c, _i = _apply_toml_config(_args(port=8180, upstream_url="http://flag:2"),
-                                          serve=True)
+        _path, _c, _i = _apply_toml_config(
+            _args(port=8180, upstream_url="http://flag:2"), serve=True
+        )
         assert os.environ.get("PTP_PORT", "8180") == "8180"
         assert "PTP_PORT" not in os.environ
         assert os.environ.get("PTP_UPSTREAM_URL") in (None, "http://flag:2")
@@ -157,12 +171,15 @@ class TestBridgeRouting:
         monkeypatch.chdir(tmp_path)
         # NOTE: a top-level key placed after a [table] header becomes part of
         # that table — default_backend must come before the routing sections.
-        _write_toml(tmp_path, (
-            'default_backend = "mlx"\n'
-            '[routing.gguf]\nurl = "http://127.0.0.1:8181/"\n'
-            'models = ["qwen-gguf", "qwen"]\n'
-            '[routing.mlx]\nurl = "http://127.0.0.1:8281"\n'
-        ))
+        _write_toml(
+            tmp_path,
+            (
+                'default_backend = "mlx"\n'
+                '[routing.gguf]\nurl = "http://127.0.0.1:8181/"\n'
+                'models = ["qwen-gguf", "qwen"]\n'
+                '[routing.mlx]\nurl = "http://127.0.0.1:8281"\n'
+            ),
+        )
         _apply_toml_config(_args(), serve=True, routing=True)
         assert os.environ["PTP_UPSTREAM_GGUF"] == "http://127.0.0.1:8181"
         assert os.environ["PTP_UPSTREAM_GGUF_MODELS"] == "qwen-gguf,qwen"
@@ -172,28 +189,33 @@ class TestBridgeRouting:
     def test_per_entry_default_true(self, tmp_path, monkeypatch):
         """`default = true` on exactly one [routing.*] entry works standalone."""
         monkeypatch.chdir(tmp_path)
-        _write_toml(tmp_path, (
-            '[routing.gguf]\nurl = "http://127.0.0.1:8181"\n'
-            '[routing.mlx]\nurl = "http://127.0.0.1:8281"\n'
-            "default = true\n"
-        ))
+        _write_toml(
+            tmp_path,
+            (
+                '[routing.gguf]\nurl = "http://127.0.0.1:8181"\n'
+                '[routing.mlx]\nurl = "http://127.0.0.1:8281"\n'
+                "default = true\n"
+            ),
+        )
         _apply_toml_config(_args(), serve=True, routing=True)
         assert os.environ["PTP_DEFAULT_BACKEND"] == "mlx"
 
     def test_multiple_defaults_rejected(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        _write_toml(tmp_path, (
-            '[routing.gguf]\nurl = "http://a"\ndefault = true\n'
-            '[routing.mlx]\nurl = "http://b"\ndefault = true\n'
-        ))
+        _write_toml(
+            tmp_path,
+            (
+                '[routing.gguf]\nurl = "http://a"\ndefault = true\n'
+                '[routing.mlx]\nurl = "http://b"\ndefault = true\n'
+            ),
+        )
         with pytest.raises(ValueError, match="more than one routing entry"):
             apply_config(_args(), serve=True, routing=True)
 
     def test_flag_backends_block_config_routing(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         _write_toml(tmp_path, '[routing.gguf]\nurl = "http://cfg:1"')
-        _apply_toml_config(_args(upstream=["xx=http://flag:1"]), serve=True,
-                           routing=True)
+        _apply_toml_config(_args(upstream=["xx=http://flag:1"]), serve=True, routing=True)
         assert "PTP_UPSTREAM_GGUF" not in os.environ
 
     def test_env_backends_block_config_routing(self, tmp_path, monkeypatch):
@@ -247,8 +269,9 @@ class TestValidateConfig:
     fast at load time with a pointed message instead of becoming indirect
     runtime symptoms."""
 
-    _REPO_EXAMPLE = Path(__file__).resolve().parents[3] / "examples" / \
-        "proxytool" / "proxytool.toml"
+    _REPO_EXAMPLE = (
+        Path(__file__).resolve().parents[3] / "examples" / "proxytool" / "proxytool.toml"
+    )
 
     def _expect_error(self, tmp_path, text: str, match: str) -> None:
         p = _write_toml(tmp_path, text)
@@ -256,16 +279,23 @@ class TestValidateConfig:
             load_config(p)
 
     def test_unknown_section_typo_suggested(self, tmp_path):
-        self._expect_error(tmp_path, '[upstreams]\nurl = "http://a"',
-                           "unknown key 'upstreams'.*did you mean 'upstream'")
+        self._expect_error(
+            tmp_path,
+            '[upstreams]\nurl = "http://a"',
+            "unknown key 'upstreams'.*did you mean 'upstream'",
+        )
 
     def test_unknown_top_level_key_suggested(self, tmp_path):
-        self._expect_error(tmp_path, "prot = 8180",
-                           r"unknown key 'prot' \(top level\).*did you mean 'port'")
+        self._expect_error(
+            tmp_path, "prot = 8180", r"unknown key 'prot' \(top level\).*did you mean 'port'"
+        )
 
     def test_unknown_key_in_upstream(self, tmp_path):
-        self._expect_error(tmp_path, "[upstream]\ntimeot = 600",
-                           r"unknown key 'timeot' in \[upstream\].*did you mean 'timeout'")
+        self._expect_error(
+            tmp_path,
+            "[upstream]\ntimeot = 600",
+            r"unknown key 'timeot' in \[upstream\].*did you mean 'timeout'",
+        )
 
     def test_port_wrong_type(self, tmp_path):
         self._expect_error(tmp_path, 'port = "high"', "valid integer")
@@ -341,7 +371,8 @@ class TestDescribeConfig:
         info = describe_config(_args())
         assert info["valid"] and info["file"] is None
         assert info["settings"] == [] or all(
-            r["source"] == "env (pre-existing)" for r in info["settings"])
+            r["source"] == "env (pre-existing)" for r in info["settings"]
+        )
 
 
 class TestConfigCommand:

@@ -56,7 +56,9 @@ class TestPickSingleBackendUrl:
 class TestMergeEnv:
     def test_flags_written_into_env_when_unset(self, monkeypatch, clean_env) -> None:
         args = type(
-            "A", (), {
+            "A",
+            (),
+            {
                 "upstream_api_key": "sk-x",
                 "upstream_timeout": 42.0,
                 "model_map": '{"a": "b"}',
@@ -76,10 +78,19 @@ class TestMergeEnv:
 
     def test_existing_env_not_clobbered(self, monkeypatch, clean_env) -> None:
         monkeypatch.setenv("PTP_TRACE", "1")
-        args = type("A", (), {"upstream_api_key": None,
-                              "upstream_timeout": None, "model_map": None,
-                              "model_map_file": None, "trace": True,
-                              "loop_nudge": None, "loop_abort": None})()
+        args = type(
+            "A",
+            (),
+            {
+                "upstream_api_key": None,
+                "upstream_timeout": None,
+                "model_map": None,
+                "model_map_file": None,
+                "trace": True,
+                "loop_nudge": None,
+                "loop_abort": None,
+            },
+        )()
         cli_mod._merge_env_into_process_env(args, {})
         assert os.environ["PTP_TRACE"] == "1"  # not clobbered to "1" again
 
@@ -105,14 +116,19 @@ class TestParser:
 
     def test_repeatable_upstream_flags(self) -> None:
         parser = cli_mod.build_parser()
-        args = parser.parse_args([
-            "serve",
-            "--upstream", "gguf=http://127.0.0.1:8181",
-            "--upstream", "mlx=http://127.0.0.1:8281",
-            "--upstream-models", "gguf=qwen-gguf,qwen",
-            "--default-backend", "mlx",
-        ])
+        args = parser.parse_args(
+            [
+                "serve",
+                "--upstream",
+                "gguf=http://127.0.0.1:8181",
+                "--upstream",
+                "mlx=http://127.0.0.1:8281",
+                "--upstream-models",
+                "gguf=qwen-gguf,qwen",
+                "--default-backend",
+                "mlx",
+            ]
+        )
         assert args.upstream == ["gguf=http://127.0.0.1:8181", "mlx=http://127.0.0.1:8281"]
         assert args.upstream_models == ["gguf=qwen-gguf,qwen"]
         assert args.default_backend == "mlx"
-

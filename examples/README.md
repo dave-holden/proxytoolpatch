@@ -13,16 +13,17 @@ Ports, startup order and the per-server commands live in `dev/RIG.md`
 | [`proxytool/proxytool-routing.toml`](proxytool/proxytool-routing.toml) | Same, for the gateway-less rig: four backends on fixed ports 8181/8182/8281/8381, routed by model id | `proxytool serve --config examples/proxytool/proxytool-routing.toml` |
 | [`opencode/opencode-gguf.jsonc`](opencode/opencode-gguf.jsonc) | opencode client wired to `proxytool/qwen-gguf` (llama-server upstream) | `OPENCODE_CONFIG=./examples/opencode/opencode-gguf.jsonc` |
 | [`opencode/opencode-mlx.jsonc`](opencode/opencode-mlx.jsonc) | opencode client wired to `proxytool/qwen-mlx` (mlx_lm.server upstream) | `OPENCODE_CONFIG=./examples/opencode/opencode-mlx.jsonc` |
-| [`opencode/opencode-swap.jsonc`](opencode/opencode-swap.jsonc) | opencode client listing all four models (three swap-demo + the oMLX Phi) | `OPENCODE_CONFIG=./examples/opencode/opencode-swap.jsonc` |
-| [`pi/models.json`](pi/models.json) | pi client provider + four model aliases (`qwen-gguf`, `qwen-mlx`, `phi-4-mini`, `phi-4-mini-mlx`) through the proxy | `~/.pi/agent/models.json` (or `$PI_CODING_AGENT_DIR/models.json`) |
+| [`opencode/opencode-swap.jsonc`](opencode/opencode-swap.jsonc) | opencode client listing all four models (three swap-demo + the oMLX 0.5B) | `OPENCODE_CONFIG=./examples/opencode/opencode-swap.jsonc` |
+| [`pi/models.json`](pi/models.json) | pi client provider + four model aliases (`qwen-gguf`, `qwen-mlx`, `qwen2.5-0.5b-instruct-gguf`, `qwen2.5-0.5b-4bit`) through the proxy | `~/.pi/agent/models.json` (or `$PI_CODING_AGENT_DIR/models.json`) |
 | [`llama-swap/config.yml`](llama-swap/config.yml) | llama-swap gateway: three models in one swap group, spawned on demand | `llama-swap --config examples/llama-swap/config.yml` |
+| [`toolpatch-before-after.py`](toolpatch-before-after.py) | No proxy process: one leaked reply repaired by `toolpatch` directly, non-streaming and streamed | `python examples/toolpatch-before-after.py` |
 
 ## Three-model swap demo
 
-Qwen2.5-Coder-14B in GGUF **and** MLX, plus Phi-4-mini Q5_K_M — one model
+Qwen2.5-Coder-14B in GGUF **and** MLX, plus Qwen2.5-0.5B-Instruct q4_k_m — one model
 resident at a time, swapped on demand by llama-swap.
 
-**0. Once:** install the backends and prefetch the three models (~20 GB):
+**0. Once:** install the backends and prefetch the three models (~17 GB):
 
 ```bash
 brew install llama.cpp                # `llama` → `llama serve`
@@ -30,10 +31,10 @@ uv tool install mlx-lm                # mlx_lm.server
 hf download Qwen/Qwen2.5-Coder-14B-Instruct-GGUF \
   --include '*q4_0.gguf'              # qwen-gguf, 8.5 GB
 hf download mlx-community/Qwen2.5-Coder-14B-Instruct-4bit   # qwen-mlx, 8.3 GB
-hf download bartowski/microsoft_Phi-4-mini-instruct-GGUF \
-  --include '*Q5_K_M.gguf'            # phi-4-mini, 2.8 GB
+hf download Qwen/Qwen2.5-0.5B-Instruct-GGUF \
+  --include '*q4_k_m.gguf'            # qwen2.5-0.5b-instruct-gguf, 0.5 GB
 
-hf cache ls --no-truncate             # confirm all three are on disk
+hf cache list                          # confirm all three are on disk
 ```
 
 **1. Terminal 1 — llama-swap** (gateway on :8080):
@@ -52,9 +53,9 @@ curl -s http://127.0.0.1:8180/v1/models \
   | python3 -c "import json,sys; print([m['id'] for m in json.load(sys.stdin)['data']])"
 ```
 
-The last command must list `qwen-gguf`, `qwen-mlx` and `phi-4-mini` (llama-swap
-orders them itself) — that is what the clients receive, and the ids are
-already what llama-swap expects.
+The last command must list `qwen-gguf`, `qwen-mlx` and
+`qwen2.5-0.5b-instruct-gguf` (llama-swap orders them itself) — that is what
+the clients receive, and the ids are already what llama-swap expects.
 (`proxytool models` prints only `[routing.*]` backends, so it stays empty in
 single-upstream mode; it's for multi-backend setups.)
 
@@ -66,7 +67,7 @@ export PI_CODING_AGENT_DIR=/tmp/pi-demo
 
 pi --provider proxytool --model qwen-gguf  -p "List the files in this directory."
 pi --provider proxytool --model qwen-mlx   -p "List the files in this directory."
-pi --provider proxytool --model phi-4-mini -p "List the files in this directory."
+pi --provider proxytool --model qwen2.5-0.5b-instruct-gguf -p "List the files in this directory."
 ```
 
 This keeps your existing `~/.pi/agent/models.json` untouched; merge the
@@ -82,7 +83,7 @@ next while proxytool waits out the cold start.
 export OPENCODE_CONFIG=./examples/opencode/opencode-swap.jsonc
 opencode run -m proxytool/qwen-gguf  "List the files in this directory."
 opencode run -m proxytool/qwen-mlx   "List the files in this directory."
-opencode run -m proxytool/phi-4-mini "List the files in this directory."
+opencode run -m proxytool/qwen2.5-0.5b-instruct-gguf "List the files in this directory."
 ```
 
 Interactively, `/models` switches model in-session.
@@ -129,6 +130,12 @@ proxytool serve --upstream-url http://127.0.0.1:8181
 **mlx_lm.server**: start it the same way (`python -m mlx_lm.server --model
 mlx-community/Qwen2.5-Coder-14B-Instruct-4bit --port 8181`), then point
 proxytool's `--upstream-url` at it.
+
+**oMLX**: serves the model directory name as the OpenAI model id, so the
+alias is `qwen2.5-0.5b-4bit` (the symlink name in `~/.mlx-serve/models`) when
+it picks the model up from that directory. If it reads the Hugging Face cache
+instead, the id is the mangled cache dir name —
+`mlx-community--Qwen2.5-0.5B-Instruct-4bit` — and needs a `[model_map]` entry.
 
 **Client aliases** (`qwen-gguf`, `qwen-mlx`) are meaningless to the upstream —
 they must map to real model ids via `--model-map` or the `[model_map]` section

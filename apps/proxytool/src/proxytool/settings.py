@@ -44,7 +44,7 @@ class Settings:
         # (for llama-swap gateways / llama-server --api-key). Client auth
         # headers are forwarded per-request separately in the conduit.
         self.upstream_api_key: str = _env("UPSTREAM_API_KEY", "")
-        self.trace: bool = (_env("TRACE", "") == "1" or _env("TRACE_FILE", "") != "")
+        self.trace: bool = _env("TRACE", "") == "1" or _env("TRACE_FILE", "") != ""
         self.model_map: dict[str, str] = _model_map()
         # LoopGuard thresholds (0 disables that escape entirely).
         self.loop_nudge: int = int(_env("LOOP_NUDGE", "3") or 0)

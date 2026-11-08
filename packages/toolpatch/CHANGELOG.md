@@ -5,6 +5,14 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.5.1] - 2026-11-08
+
+### Miscellaneous
+
+- **guards**: Reject AI-tool attribution in commit messages (#41) ([`c6f4a32`](https://github.com/dave-holden/proxytoolpatch/commit/c6f4a3242629ee288beaf7b03d3281f432257b0a))
+
+[toolpatch-v0.5.0...toolpatch-v0.5.1](https://github.com/dave-holden/proxytoolpatch/compare/toolpatch-v0.5.0...toolpatch-v0.5.1)
+
 ## [0.5.0] - 2026-10-26
 
 ### Other Changes

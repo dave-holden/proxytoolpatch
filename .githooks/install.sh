@@ -7,11 +7,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-chmod +x .githooks/pre-push .githooks/pre-commit .githooks/pre-push-gate.sh 2>/dev/null || true
+chmod +x .githooks/pre-push .githooks/pre-commit .githooks/pre-push-gate.sh .githooks/commit-msg 2>/dev/null || true
 git config core.hooksPath .githooks
 
 echo "hooks installed: core.hooksPath = .githooks"
 echo "  pre-push   → .githooks/pre-push-gate.sh pre-push"
 echo "  pre-commit → .githooks/pre-push-gate.sh pre-commit (reduced gate)"
+echo "  commit-msg → scripts/check-commit-attribution.mjs (AI-tool attribution)"
 echo ""
 echo "full matrix per push: FULL_MATRIX=1 git push ..."

@@ -40,13 +40,13 @@ def test_search_candidates_explicit_and_env(monkeypatch, tmp_path):
     monkeypatch.setenv("PTP_CONFIG", str(tmp_path / "via-env.toml"))
     assert [p.name for p in config._search_candidates(None)] == ["via-env.toml"]
     monkeypatch.delenv("PTP_CONFIG")
-    assert str(tmp_path / "explicit.toml") in str(config._search_candidates(
-        str(tmp_path / "explicit.toml")))
+    assert str(tmp_path / "explicit.toml") in str(
+        config._search_candidates(str(tmp_path / "explicit.toml"))
+    )
 
 
 def test_detail_for_map():
-    assert config._detail_for("PTP_LOOP_ABORT") == config._SEARCH_DETAIL.get(
-        "PTP_LOOP_ABORT", "")
+    assert config._detail_for("PTP_LOOP_ABORT") == config._SEARCH_DETAIL.get("PTP_LOOP_ABORT", "")
     assert config._detail_for("PTP_UPSTREAM_MLX_MODELS") == "routing.mlx.models"
     assert config._detail_for("PTP_UPSTREAM_MLX") == "routing.mlx.url"
     assert config._detail_for("SOME_RANDOM_KEY") == ""
@@ -102,34 +102,60 @@ def test_cmd_start_argv_carries_all_flags(state_env, monkeypatch):
         return _FakeChild()
 
     monkeypatch.setattr("subprocess.Popen", fake_popen)
-    monkeypatch.setattr(urllib.request, "urlopen",
-                        lambda *a, **k: _FakeResp(200))
-    args = _parse([
-        "start",
-        "--upstream-url", "http://127.0.0.1:9998",
-        "--model-map", '{"a": "b"}', "--upstream-api-key", "sk-x",
-        "--upstream-timeout", "5", "--default-backend", "fake",
-        "--upstream", "gguf=http://127.0.0.1:9998",
-        "--upstream-models", "gguf=qwen-gguf", "--trace",
-        "--loop-nudge", "2", "--loop-abort", "4", "--log-level", "debug",
-    ])
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _FakeResp(200))
+    args = _parse(
+        [
+            "start",
+            "--upstream-url",
+            "http://127.0.0.1:9998",
+            "--model-map",
+            '{"a": "b"}',
+            "--upstream-api-key",
+            "sk-x",
+            "--upstream-timeout",
+            "5",
+            "--default-backend",
+            "fake",
+            "--upstream",
+            "gguf=http://127.0.0.1:9998",
+            "--upstream-models",
+            "gguf=qwen-gguf",
+            "--trace",
+            "--loop-nudge",
+            "2",
+            "--loop-abort",
+            "4",
+            "--log-level",
+            "debug",
+        ]
+    )
     assert cli.cmd_start(args) == 0
     argv = captured["argv"]
-    for expected in ("--upstream-url", "--model-map", "--upstream-api-key",
-                     "--upstream-timeout", "5", "--default-backend",
-                     "--trace", "--loop-nudge", "2",
-                     "--loop-abort", "4", "--log-level", "debug"):
+    for expected in (
+        "--upstream-url",
+        "--model-map",
+        "--upstream-api-key",
+        "--upstream-timeout",
+        "5",
+        "--default-backend",
+        "--trace",
+        "--loop-nudge",
+        "2",
+        "--loop-abort",
+        "4",
+        "--log-level",
+        "debug",
+    ):
         assert expected in argv
     assert "--quiet" not in argv
 
 
 def test_cmd_start_arg_quiet_flag(state_env, monkeypatch):
     captured: dict = {}
-    monkeypatch.setattr("subprocess.Popen",
-                        lambda argv, **kw: (captured.update(argv=argv),
-                                            _FakeChild())[1])
-    monkeypatch.setattr(urllib.request, "urlopen",
-                        lambda *a, **k: _FakeResp(200))
+    monkeypatch.setattr(
+        "subprocess.Popen", lambda argv, **kw: (captured.update(argv=argv), _FakeChild())[1]
+    )
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _FakeResp(200))
     args = _parse(["start", "--quiet"])
     assert cli.cmd_start(args) == 0
     assert "--quiet" in captured["argv"]
