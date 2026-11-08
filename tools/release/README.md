@@ -41,6 +41,15 @@ tools/release/plan.py --dry-run
 # Did every merged version actually get its tag? (exit 1 and the exact
 # commands to fix it when one is missing)
 tools/release/plan.py --check-tags
+
+# What each index serves right now. `pip index versions` needs real pip;
+# `uv pip` has no `index` subcommand.
+pip index versions proxytool
+pip index versions proxytool --index-url https://test.pypi.org/simple/ --pre
+
+# Every version as data, for a diff of the two indexes
+curl -s https://pypi.org/pypi/proxytool/json | jq -r '.releases | keys[]'
+curl -s https://test.pypi.org/pypi/proxytool/json | jq -r '.releases | keys[]'
 ```
 
 ### Retrospective rebuild (one package, or all)
@@ -149,6 +158,12 @@ jobs are skipped because they require `ref_type == 'tag'`.
   trigger or appear in a release.
 - Packages without a `<name>-v*` tag are skipped by the planner: there is no
   baseline to diff against until the first per-package tag lands.
+- Don't trust `/pypi/<pkg>/json` when checking a single upload or a deletion:
+  it is CDN-cached and can keep serving the old project page, stale
+  `info.version` included, for minutes. The simple index (`/simple/<pkg>/`) and
+  the per-release JSON (`/pypi/<pkg>/<version>/json`, 404 once gone) are
+  authoritative. Deleting a release is web-UI only — there is no API — and a
+  version number can never be reused on real PyPI.
 - Don't run `plan.py` twice without committing — it prepends from the *last
   tag*, so an uncommitted bump makes the next run bump again. Workflows are
   immune (they always start from the default branch).
