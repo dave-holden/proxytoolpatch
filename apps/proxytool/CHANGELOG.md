@@ -17,14 +17,6 @@ All notable changes to this package, generated from
 
 [proxytool-v0.5.1...proxytool-v0.5.3](https://github.com/dave-holden/proxytoolpatch/compare/proxytool-v0.5.1...proxytool-v0.5.3)
 
-## [0.5.2] - 2026-11-06
-
-### Documentation
-
-- Publish the step-by-step guide and server/client matrix (#33) ([`4398ff1`](https://github.com/dave-holden/proxytoolpatch/commit/4398ff1884c2d63366a71661d9097b6af6be34a9))
-
-[proxytool-v0.5.0...proxytool-v0.5.2](https://github.com/dave-holden/proxytoolpatch/compare/proxytool-v0.5.0...proxytool-v0.5.2)
-
 ## [0.5.1] - 2026-11-06
 
 ### Documentation
