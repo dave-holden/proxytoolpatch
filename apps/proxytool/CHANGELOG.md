@@ -5,6 +5,22 @@ All notable changes to this package, generated from
 [git-cliff](https://git-cliff.org). Do not edit by hand: rebuild it with
 `tools/release/changelog.sh <package>`.
 
+## [0.5.4] - 2026-11-08
+
+### Bug Fixes
+
+- **repair**: Stop reporting a native tool call twice (#38) ([`92e8544`](https://github.com/dave-holden/proxytoolpatch/commit/92e85440435d8d471be5c73bb7643041b57418bb))
+
+### Documentation
+
+- **changelog**: Drop the 0.5.2 section, which never reached PyPI ([`3d922c5`](https://github.com/dave-holden/proxytoolpatch/commit/3d922c53f03e301a5377cef711358948fb9b369b))
+
+### Miscellaneous
+
+- **guards**: Reject AI-tool attribution in commit messages (#41) ([`c6f4a32`](https://github.com/dave-holden/proxytoolpatch/commit/c6f4a3242629ee288beaf7b03d3281f432257b0a))
+
+[proxytool-v0.5.1...proxytool-v0.5.4](https://github.com/dave-holden/proxytoolpatch/compare/proxytool-v0.5.1...proxytool-v0.5.4)
+
 ## [0.5.3] - 2026-11-08
 
 ### Bug Fixes
