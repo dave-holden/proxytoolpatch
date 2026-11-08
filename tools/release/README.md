@@ -9,10 +9,10 @@ that directory, and released under its own namespaced tag
 | File | Purpose |
 |---|---|
 | `changelog.sh` | Rebuild/inspect a package's `CHANGELOG.md`; also resolves scoped tags (`resolve`) |
-| `plan.py` | Compute + apply release candidates (version bumps + pending changelog sections) |
+| `plan.py` | Compute + apply release candidates (version bumps + pending changelog sections); `--check-tags` verifies every declared version was actually tagged |
 | `../../cliff.toml` | The shared git-cliff configuration (conventional-commit parsing, scope prefixes, commit/PR links) |
 
-Three GitHub Actions wire this up:
+Four GitHub Actions wire this up:
 
 - **`.github/workflows/release-pr.yml`** — on pushes to main / weekly cron:
   open or update a `release/next` PR with version bumps + pending changelog
@@ -25,6 +25,10 @@ Three GitHub Actions wire this up:
   tag's section from git history and create the GitHub Release for it. It does
   **not** rewrite `CHANGELOG.md`: `main` is PR-protected, so the released
   sections belong to the release PR.
+- **`.github/workflows/release-tags.yml`** — daily, plus on demand: fail when a
+  package's declared version has no matching tag, so a release cannot be merged
+  and quietly never published. Not push-triggered on purpose: the tag is pushed
+  by hand seconds after the merge, so the check would be red on every release.
 
 ## Local commands
 
@@ -33,6 +37,10 @@ Run everything from the repository root.
 ```bash
 # What gets released right now (no files touched)
 tools/release/plan.py --dry-run
+
+# Did every merged version actually get its tag? (exit 1 and the exact
+# commands to fix it when one is missing)
+tools/release/plan.py --check-tags
 ```
 
 ### Retrospective rebuild (one package, or all)
