@@ -58,8 +58,7 @@ loop_guard = LoopGuard(
 app = FastAPI(title="proxytool")
 
 if _can_emit(_log):
-    _log.debug("proxytool initialized: upstream=%s",
-               settings.upstream_url)
+    _log.debug("proxytool initialized: upstream=%s", settings.upstream_url)
 
 PASS_HEADERS_OUT = ("content-type", "x-request-id")
 
@@ -271,9 +270,14 @@ async def chat_completions(request: Request):
         client_model = str(payload.get("model") or "")
         decision = router.route(client_model)
         chat_conduit = conduit_for(decision.backend.name)
-        trace.log("PT.ROUTE", {"model": client_model,
-                               "backend": decision.backend.name,
-                               "matched_by": decision.matched_by})
+        trace.log(
+            "PT.ROUTE",
+            {
+                "model": client_model,
+                "backend": decision.backend.name,
+                "matched_by": decision.matched_by,
+            },
+        )
     backend = _resolve_backend(payload)
     payload, notes = normalize_chat_request(payload, backend=backend)
     if backend == "mlx":
@@ -303,29 +307,37 @@ async def chat_completions(request: Request):
 
     if payload.get("stream"):
         return await _streaming(
-            request=request, payload=payload,
+            request=request,
+            payload=payload,
             client_headers={k.lower(): v for k, v in request.headers.items()},
             conduit=chat_conduit,
         )
-    return await _non_streaming(payload=payload, client_headers=
-        {k.lower(): v for k, v in request.headers.items()}, conduit=chat_conduit)
+    return await _non_streaming(
+        payload=payload,
+        client_headers={k.lower(): v for k, v in request.headers.items()},
+        conduit=chat_conduit,
+    )
 
 
-async def _non_streaming(payload: dict[str, Any],
-                         client_headers: dict[str, str] | None = None,
-                         conduit: UpstreamConduit | None = None):
+async def _non_streaming(
+    payload: dict[str, Any],
+    client_headers: dict[str, str] | None = None,
+    conduit: UpstreamConduit | None = None,
+):
     conduit = conduit or globals()["conduit"]
     assert conduit is not None
-    upstream = await conduit.forward_json(
-        "/v1/chat/completions", payload, headers=client_headers
-    )
+    upstream = await conduit.forward_json("/v1/chat/completions", payload, headers=client_headers)
     if upstream.status_code >= 400:
         trace.log("UPSTREAM->PT", {"error": upstream.text[:500]})
         return JSONResponse(
-            {"error": {"message": f"upstream error (HTTP {upstream.status_code}): "
-                       f"{upstream.text[:500]}",
-                       "type": "upstream_error",
-                       "code": upstream.status_code}},
+            {
+                "error": {
+                    "message": f"upstream error (HTTP {upstream.status_code}): "
+                    f"{upstream.text[:500]}",
+                    "type": "upstream_error",
+                    "code": upstream.status_code,
+                }
+            },
             status_code=upstream.status_code,
         )
     try:
@@ -350,8 +362,7 @@ def _call_key(call: dict[str, Any]) -> tuple[str, str]:
     fn = call.get("function") or {}
     args = fn.get("arguments")
     try:
-        normalised = json.dumps(json.loads(args) if isinstance(args, str) else args,
-                                sort_keys=True)
+        normalised = json.dumps(json.loads(args) if isinstance(args, str) else args, sort_keys=True)
     except (json.JSONDecodeError, TypeError, ValueError):
         normalised = str(args)
     return (str(fn.get("name")), normalised)
@@ -389,15 +400,16 @@ def _repair_response(data: dict[str, Any], tool_names: set[str] | None) -> bool:
     return repaired
 
 
-async def _streaming(request: Request, payload: dict[str, Any],
-                     client_headers: dict[str, str] | None = None,
-                     conduit: UpstreamConduit | None = None):
+async def _streaming(
+    request: Request,
+    payload: dict[str, Any],
+    client_headers: dict[str, str] | None = None,
+    conduit: UpstreamConduit | None = None,
+):
     conduit = conduit or globals()["conduit"]
     assert conduit is not None
     tool_names = _request_tool_names(payload)
-    upstream = await conduit.forward_stream(
-        "/v1/chat/completions", payload, headers=client_headers
-    )
+    upstream = await conduit.forward_stream("/v1/chat/completions", payload, headers=client_headers)
     if upstream.status_code >= 400:
         body = await upstream.aread()
         await upstream.aclose()
@@ -412,12 +424,15 @@ async def _streaming(request: Request, payload: dict[str, Any],
         terminated = False  # a finish_reason has been forwarded downstream
         first_role: str | None = None  # upstream role delta, forwarded once
 
-        def _ev_json(ev: dict[str, Any],
-                     finish_reason: str | None = None,
-                     usage_: dict[str, Any] | None = None) -> bytes:
+        def _ev_json(
+            ev: dict[str, Any],
+            finish_reason: str | None = None,
+            usage_: dict[str, Any] | None = None,
+        ) -> bytes:
             nonlocal first_role
             r, first_role = first_role, None
             return _event_json(ev, meta, finish_reason, usage_, role=r)
+
         try:
             async for chunk in upstream.aiter_bytes():
                 for kind, data in sse.feed(chunk):
@@ -448,8 +463,7 @@ async def _streaming(request: Request, payload: dict[str, Any],
                         # verbatim instead of feeding the healer, which only
                         # repairs the text-leak shapes. Clients aggregate
                         # OpenAI tool-call deltas by their `index`.
-                        yield _ev_json({"type": "tool_calls",
-                                        "tool_calls": native_tools})
+                        yield _ev_json({"type": "tool_calls", "tool_calls": native_tools})
                         continue
                     text = delta.get("content")
                     if not text:
@@ -550,21 +564,19 @@ def _loop_guard_abort(count: int, stream: bool) -> Response | StreamingResponse:
             "created": created,
             "model": "loopguard",
             "choices": [
-                {"delta": {"role": "assistant", "content": text},
-                 "index": 0, "finish_reason": None}
+                {"delta": {"role": "assistant", "content": text}, "index": 0, "finish_reason": None}
             ],
         }
         last = {
             "id": "loopguard-abort",
             "created": created,
             "model": "loopguard",
-            "choices": [
-                {"delta": {}, "index": 0, "finish_reason": "stop"}
-            ],
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
         }
-        sse = "".join(
-            f"data: {json.dumps(c, separators=(',', ':'))}\n\n" for c in (first, last)
-        ) + "data: [DONE]\n\n"
+        sse = (
+            "".join(f"data: {json.dumps(c, separators=(',', ':'))}\n\n" for c in (first, last))
+            + "data: [DONE]\n\n"
+        )
         return StreamingResponse(
             iter([sse.encode()]), media_type="text/event-stream", status_code=200
         )
@@ -594,8 +606,9 @@ async def passthrough(request: Request, path: str = "v1/models"):
     try:
         upstream = await conduit.passthrough(request.method, path, headers, content)
     except httpx.ConnectError:
-        return JSONResponse({"error": f"upstream unreachable: {settings.upstream_url}"},
-                            status_code=502)
+        return JSONResponse(
+            {"error": f"upstream unreachable: {settings.upstream_url}"}, status_code=502
+        )
     return _as_response(upstream, upstream.content)
 
 

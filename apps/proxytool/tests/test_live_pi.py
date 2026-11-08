@@ -55,9 +55,7 @@ def _proxytool_live() -> bool:
 
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("PTP_LIVE") != "1"
-    or not _pi_available()
-    or not _proxytool_live(),
+    os.environ.get("PTP_LIVE") != "1" or not _pi_available() or not _proxytool_live(),
     reason="PTP_LIVE=1 not set, pi CLI missing, or proxytool not running",
 )
 
@@ -105,8 +103,7 @@ def _run_pi(workdir: Path, env: dict[str, str], prompt: str) -> str:
     (projdir / "README.md").write_text("empty sandbox project\n", encoding="utf-8")
 
     proc = subprocess.run(
-        [PI_BIN, "--provider", "proxytool-mw-test", "--model", MODEL,
-         "-p", prompt],
+        [PI_BIN, "--provider", "proxytool-mw-test", "--model", MODEL, "-p", prompt],
         env=env,
         capture_output=True,
         text=True,

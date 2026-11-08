@@ -37,9 +37,15 @@ def state_env(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def clean_upstream_env(monkeypatch):
     """Upstream-routing env vars leak across tests; start each one clean."""
-    for var in ("PTP_UPSTREAM_URL", "PTP_DEFAULT_BACKEND",
-                "PTP_UPSTREAM_API_KEY", "PTP_TRACE",
-                "PTP_UPSTREAM_TIMEOUT", "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE"):
+    for var in (
+        "PTP_UPSTREAM_URL",
+        "PTP_DEFAULT_BACKEND",
+        "PTP_UPSTREAM_API_KEY",
+        "PTP_TRACE",
+        "PTP_UPSTREAM_TIMEOUT",
+        "PTP_MODEL_MAP",
+        "PTP_MODEL_MAP_FILE",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -194,8 +200,9 @@ def test_cmd_start_health_never_up(state_env, monkeypatch, capsys):
     # Fake clock 0.6s/call + no-op sleep → the 30s deadline shapes out in
     # ~50 quick iterations instead of 30 realtime seconds.
     tick = iter(float(i) * 0.6 for i in range(1_000))
-    monkeypatch.setattr(cli, "time", types.SimpleNamespace(
-        monotonic=lambda: next(tick, 1e9), sleep=lambda s: None))
+    monkeypatch.setattr(
+        cli, "time", types.SimpleNamespace(monotonic=lambda: next(tick, 1e9), sleep=lambda s: None)
+    )
     assert cli.cmd_start(_parse(["start", "--port", "8999"])) == 1
     assert "never came up" in capsys.readouterr().err
 
@@ -276,8 +283,7 @@ def test_cmd_serve_runs_uvicorn_once(state_env, monkeypatch):
         calls.append((a, kw))
 
     monkeypatch.setattr("uvicorn.run", fake_uvicorn_run)
-    args = _parse(["serve", "--port", "8971",
-                   "--upstream-url", "http://127.0.0.1:8288"])
+    args = _parse(["serve", "--port", "8971", "--upstream-url", "http://127.0.0.1:8288"])
     assert cli.cmd_serve(args) == 0
     assert len(calls) == 1
     a, kw = calls[0]
@@ -290,19 +296,32 @@ def test_cmd_serve_upstream_models_flags_export_routes(state_env, monkeypatch):
     """Repeatable --upstream-models NAME=m1,m2 must produce a routing table."""
     # cmd_serve writes these DIRECTLY (os.environ); pre-set them so monkeypatch
     # restores them and they don't leak into later tests.
-    for key in ("PTP_UPSTREAM_GGUF", "PTP_UPSTREAM_GGUF_MODELS",
-                "PTP_UPSTREAM_MLX", "PTP_UPSTREAM_MLX_MODELS",
-                "PTP_DEFAULT_BACKEND"):
+    for key in (
+        "PTP_UPSTREAM_GGUF",
+        "PTP_UPSTREAM_GGUF_MODELS",
+        "PTP_UPSTREAM_MLX",
+        "PTP_UPSTREAM_MLX_MODELS",
+        "PTP_DEFAULT_BACKEND",
+    ):
         monkeypatch.setenv(key, "")
     monkeypatch.setattr("uvicorn.run", lambda *a, **kw: None)
-    args = _parse([
-        "serve", "--port", "8972",
-        "--upstream", "gguf=http://127.0.0.1:8181",
-        "--upstream-models", "gguf=qwen-gguf,qwen",
-        "--upstream", "mlx=http://127.0.0.1:8281",
-        "--upstream-models", "mlx=qwen-mlx",
-        "--default-backend", "mlx",
-    ])
+    args = _parse(
+        [
+            "serve",
+            "--port",
+            "8972",
+            "--upstream",
+            "gguf=http://127.0.0.1:8181",
+            "--upstream-models",
+            "gguf=qwen-gguf,qwen",
+            "--upstream",
+            "mlx=http://127.0.0.1:8281",
+            "--upstream-models",
+            "mlx=qwen-mlx",
+            "--default-backend",
+            "mlx",
+        ]
+    )
     assert cli.cmd_serve(args) == 0
     assert os.environ["PTP_UPSTREAM_GGUF"] == "http://127.0.0.1:8181"
     assert os.environ["PTP_UPSTREAM_GGUF_MODELS"] == "qwen-gguf,qwen"
@@ -323,17 +342,30 @@ def test_merge_env_into_process_env(monkeypatch):
     import proxytool.routing as routing
 
     args = types.SimpleNamespace(
-        upstream_api_key="sk", upstream_timeout=7.5,
-        model_map=None, model_map_file=None, trace=True,
-        loop_nudge=3, loop_abort=9, upstream_url=None,
+        upstream_api_key="sk",
+        upstream_timeout=7.5,
+        model_map=None,
+        model_map_file=None,
+        trace=True,
+        loop_nudge=3,
+        loop_abort=9,
+        upstream_url=None,
     )
     # Pre-set every key the helper writes directly: teardown restores them.
-    for var in ("PTP_UPSTREAM_API_KEY", "PTP_UPSTREAM_TIMEOUT",
-                "PTP_MODEL_MAP", "PTP_MODEL_MAP_FILE", "PTP_TRACE",
-                "PTP_LOOP_NUDGE", "PTP_LOOP_ABORT", "PTP_DEFAULT_BACKEND"):
+    for var in (
+        "PTP_UPSTREAM_API_KEY",
+        "PTP_UPSTREAM_TIMEOUT",
+        "PTP_MODEL_MAP",
+        "PTP_MODEL_MAP_FILE",
+        "PTP_TRACE",
+        "PTP_LOOP_NUDGE",
+        "PTP_LOOP_ABORT",
+        "PTP_DEFAULT_BACKEND",
+    ):
         monkeypatch.setenv(var, "")
-    backends = {"b": routing.Backend(name="b", url="http://127.0.0.1:1",
-                                     models=("m",), default=True)}
+    backends = {
+        "b": routing.Backend(name="b", url="http://127.0.0.1:1", models=("m",), default=True)
+    }
     monkeypatch.delenv("PTP_LOOP_NUDGE", raising=False)
     monkeypatch.delenv("PTP_LOOP_ABORT", raising=False)
     cli._merge_env_into_process_env(args, backends)
@@ -359,8 +391,9 @@ def test_pick_single_backend_url(monkeypatch):
 
 # ---------------------------------------------------------------- __main__
 def test_python_dash_m_proxytool_help_exits_zero():
-    res = subprocess.run([sys.executable, "-m", "proxytool", "--help"],
-                         capture_output=True, text=True, timeout=30)
+    res = subprocess.run(
+        [sys.executable, "-m", "proxytool", "--help"], capture_output=True, text=True, timeout=30
+    )
     assert res.returncode == 0
     assert "serve" in res.stdout
 
@@ -379,8 +412,9 @@ def test_every_subcommand_help_has_a_description_paragraph():
     first_group = sub._group_actions[0]
     assert isinstance(first_group.choices, dict) and first_group.choices
     choices = first_group.choices
-    res = subprocess.run([sys.executable, "-m", "proxytool", "--help"],
-                         capture_output=True, text=True, timeout=30)
+    res = subprocess.run(
+        [sys.executable, "-m", "proxytool", "--help"], capture_output=True, text=True, timeout=30
+    )
     top = res.stdout
     assert res.returncode == 0
     assert "self-only" in top
@@ -389,7 +423,10 @@ def test_every_subcommand_help_has_a_description_paragraph():
     for name in choices:
         out = subprocess.run(
             [sys.executable, "-m", "proxytool", name, "--help"],
-            capture_output=True, text=True, timeout=30)
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
         assert out.returncode == 0, name
         lines = out.stdout.splitlines()
         # Description = nonblank lines between the usage ladder's first
@@ -403,7 +440,8 @@ def test_every_subcommand_help_has_a_description_paragraph():
                 desc.append(line)
         assert len(desc) >= 2, f"{name}: no description paragraph:\n{out.stdout!r}"
         assert not desc[0].lstrip().startswith("["), (
-            f"{name}: usage ladder leaked into description: {desc[0]!r}")
+            f"{name}: usage ladder leaked into description: {desc[0]!r}"
+        )
 
 
 # ---------------------------------------------------------------- real-server smoke

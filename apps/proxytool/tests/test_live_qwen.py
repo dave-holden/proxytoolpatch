@@ -88,8 +88,10 @@ def test_live_nonstream_repair():
     r = httpx.post(f"{PROXY}/v1/chat/completions", json=body, timeout=180.0)
     assert r.status_code == 200, r.text
     msg = r.json()["choices"][0]["message"]
-    print("\n[capture:nonstream]", json.dumps({"content": msg.get("content"),
-                                               "tool_calls": msg.get("tool_calls")}))
+    print(
+        "\n[capture:nonstream]",
+        json.dumps({"content": msg.get("content"), "tool_calls": msg.get("tool_calls")}),
+    )
     _assert_clean(msg)
 
 
@@ -100,9 +102,7 @@ def test_live_stream_repair():
         "messages": [{"role": "user", "content": PROMPT}],
         "tools": [TOOL],
     }
-    with httpx.stream(
-        "POST", f"{PROXY}/v1/chat/completions", json=body, timeout=180.0
-    ) as r:
+    with httpx.stream("POST", f"{PROXY}/v1/chat/completions", json=body, timeout=180.0) as r:
         assert r.status_code == 200, r.text
         events, content_deltas, tool_call_chunks = [], [], []
         for line in r.iter_lines():

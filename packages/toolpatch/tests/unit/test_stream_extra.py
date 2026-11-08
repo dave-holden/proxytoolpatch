@@ -60,8 +60,7 @@ def test_fence_open_at_tail_holds():
     h = StreamHealer()
     events = h.feed("x" * 40 + "```")
     # odd fence parity at the tail: hold, do not release as prose
-    assert "```" not in "".join(e.get("text", "") for e in events
-                                  if e["type"] == "content")
+    assert "```" not in "".join(e.get("text", "") for e in events if e["type"] == "content")
 
 
 # --------------------------------------------------------------- __main__.py

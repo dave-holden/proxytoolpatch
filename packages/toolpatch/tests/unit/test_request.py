@@ -183,8 +183,10 @@ def test_mlx_no_tool_choice_no_notes():
     p = {**BASE, "tools": [GOOD_TOOL]}
     out, warn = normalize_chat_request(p, backend="mlx")
     assert "tool_choice" not in out
-    assert warn == ["leaked tool-call text turn merged into tool_calls turn"] or not warn or any(
-        "merged" in w for w in warn
+    assert (
+        warn == ["leaked tool-call text turn merged into tool_calls turn"]
+        or not warn
+        or any("merged" in w for w in warn)
     )  # history notes only; no tool_choice note when key absent
 
 

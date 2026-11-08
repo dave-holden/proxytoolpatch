@@ -160,10 +160,7 @@ def unreleased_commits(package: Package, since: str) -> list[Commit]:
 
 
 def bump_level(commits: list[Commit]) -> str:
-    if any(
-        BREAKING_SUBJECT.match(c.subject) or BREAKING_BODY.search(c.body)
-        for c in commits
-    ):
+    if any(BREAKING_SUBJECT.match(c.subject) or BREAKING_BODY.search(c.body) for c in commits):
         return "major"
     if any(FEAT_SUBJECT.match(c.subject) for c in commits):
         return "minor"
@@ -278,8 +275,7 @@ def render_markdown(plans: list[Plan], untagged: list[Package]) -> str:
         # dependency on it is unpinned).
         ordered = sorted(plans, key=lambda plan: (plan.package != "toolpatch", plan.package))
         lines += [
-            f'git tag -a {plan.tag} -m "{plan.package} {plan.next_version}"'
-            for plan in ordered
+            f'git tag -a {plan.tag} -m "{plan.package} {plan.next_version}"' for plan in ordered
         ]
         lines.append("git push origin " + " ".join(plan.tag for plan in ordered))
         lines += ["```", ""]
@@ -302,9 +298,7 @@ def render_markdown(plans: list[Plan], untagged: list[Package]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dry-run", action="store_true", help="report only, change nothing"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="report only, change nothing")
     parser.add_argument("--output-md", help="write the PR body to this path")
     parser.add_argument("--output-json", help="write the plan as JSON to this path")
     parser.add_argument(
@@ -338,8 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     github_output = args.github_output or _github_output_from_env()
     if github_output:
         title = (
-            "chore(release): "
-            + ", ".join(f"{p.package} {p.next_version}" for p in plans)
+            "chore(release): " + ", ".join(f"{p.package} {p.next_version}" for p in plans)
             if plans
             else "chore(release): no package releases pending"
         )

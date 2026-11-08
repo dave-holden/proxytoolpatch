@@ -27,7 +27,10 @@ def _configure_logging(*, level: str | None = None, quiet: bool = False) -> None
     from toolpatch.logging import configure_logger as _cfg
 
     _valid: dict[str, LogLevels] = {
-        "debug": "debug", "info": "info", "warning": "warning", "error": "error",
+        "debug": "debug",
+        "info": "info",
+        "warning": "warning",
+        "error": "error",
     }
     _level: LogLevels | None = None
     if quiet:
@@ -35,6 +38,7 @@ def _configure_logging(*, level: str | None = None, quiet: bool = False) -> None
     elif level:
         _level = _valid.get(level)
     _cfg("toolpatch", _level)
+
 
 __all__ = [
     "ExtractedToolCalls",
@@ -47,5 +51,3 @@ __all__ = [
     "heal_json",
     "normalize_chat_request",
 ]
-
-
