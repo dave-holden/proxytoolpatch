@@ -17,9 +17,15 @@ It is driven by ``.github/workflows/release-pr.yml`` and can be run locally:
     tools/release/plan.py --dry-run          # show what would happen
     tools/release/plan.py                    # bump + update changelogs
     tools/release/plan.py --output-md out.md --output-json plan.json
+    tools/release/plan.py --check-tags       # every declared version is tagged?
 
 Packages without a ``<name>-v*`` tag are reported and skipped: there is no
 baseline to diff against yet, so every commit would look unreleased.
+
+``--check-tags`` is the inverse question, asked by
+``.github/workflows/release-tags.yml``: a merged release PR only changes
+versions, and nothing reaches an index until the matching tag is pushed, so a
+forgotten tag leaves ``main`` declaring a version that exists nowhere.
 """
 
 from __future__ import annotations
@@ -130,6 +136,52 @@ def last_tag(package: Package) -> str | None:
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def tag_exists(tag: str) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def check_tags() -> int:
+    """Verify every declared version has its ``<name>-v<version>`` tag.
+
+    A tag is what actually publishes (``publish.yml``) and what creates the
+    GitHub release (``release-package.yml``); the merge of the release PR only
+    moves the declared version. Run from a full clone: a shallow one cannot see
+    the tags and would fail on every package.
+    """
+    missing: list[tuple[Package, str]] = []
+    for package in discover_packages():
+        tag = f"{package.tag_prefix}{package.version}"
+        if tag_exists(tag):
+            print(f"ok       {package.name} {package.version} -> {tag}")
+        elif last_tag(package) is None:
+            # Same rule as the planner: no baseline tag means the package has
+            # never been released, so there is nothing to be missing.
+            print(f"skip     {package.name} {package.version}: no {package.tag_prefix}* tag yet")
+        else:
+            missing.append((package, tag))
+            print(f"MISSING  {package.name} {package.version}: {tag} does not exist")
+
+    if not missing:
+        print("")
+        print("Every declared version has its tag.")
+        return 0
+
+    print("")
+    print("These versions are merged but unpublished: their tag was never pushed,")
+    print("so nothing built, published, or opened a GitHub release. Tag them from main:")
+    print("")
+    for package, tag in missing:
+        print(f'  git tag -a {tag} -m "{package.name} {package.version}"')
+    print("  git push origin " + " ".join(tag for _, tag in missing))
+    return 1
 
 
 def is_skipped(subject: str) -> bool:
@@ -305,7 +357,15 @@ def main(argv: list[str] | None = None) -> int:
         "--github-output",
         help="append changed/title outputs to this file (default $GITHUB_OUTPUT)",
     )
+    parser.add_argument(
+        "--check-tags",
+        action="store_true",
+        help="verify every declared version has its tag, then exit",
+    )
     args = parser.parse_args(argv)
+
+    if args.check_tags:
+        return check_tags()
 
     plans, untagged = build_plan(dry_run=args.dry_run)
     markdown = render_markdown(plans, untagged)

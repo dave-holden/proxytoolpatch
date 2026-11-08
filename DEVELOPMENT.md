@@ -166,7 +166,11 @@ is tagged and published on its own schedule, so their versions may differ:
 
    A tag whose version differs from the package's `pyproject.toml` fails the
    `prepare` job before anything is built. The older combined tag `vX.Y.Z`
-   still publishes both packages at once.
+   still publishes both packages at once. If a tag is forgotten, merge changes
+   the declared version but publishes nothing: the daily `release tags` check
+   (`.github/workflows/release-tags.yml`) then fails and prints the exact `git
+   tag` commands to run — the same thing
+   `tools/release/plan.py --check-tags` reports locally.
 
 3. CI: re-runs the whole matrix → builds only the tagged package(s) →
    (rc tags stop at TestPyPI) → publishes to PyPI → smoke-installs the wheel(s)
